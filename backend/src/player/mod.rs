@@ -31,6 +31,7 @@ use crate::{
         grapple::Grappling,
         solve_shape::{SolvingShape, update_solving_shape_state},
         solve_violetta::{SolvingVioletta, update_solving_violetta_state},
+        solve_captcha::{SolvingCaptcha, update_solving_captcha_state},
         unstuck::Unstucking,
         use_booster::{UsingBooster, update_using_booster_state},
     },
@@ -51,6 +52,7 @@ mod panic;
 mod solve_rune;
 mod solve_shape;
 mod solve_violetta;
+mod solve_captcha;
 mod stall;
 mod state;
 mod timeout;
@@ -110,6 +112,8 @@ pub enum Player {
     SolvingShape(SolvingShape),
     #[strum(to_string = "SolvingVioletta({0})")]
     SolvingVioletta(SolvingVioletta),
+    #[strum(to_string = "SolvingCaptcha({0})")]
+    SolvingCaptcha(SolvingCaptcha),
     /// Enters the cash shop then exit after 10 seconds.
     CashShopThenExit(CashShop),
     #[strum(to_string = "FamiliarsSwapping({0})")]
@@ -158,6 +162,7 @@ impl Player {
             | Player::ExchangingBooster(_)
             | Player::SolvingShape(_)
             | Player::SolvingVioletta(_)
+            | Player::SolvingCaptcha(_)
             | Player::Stalling(_, _) => false,
         }
     }
@@ -262,6 +267,7 @@ fn update_non_positional_state(
         }
         Player::SolvingShape(_) => update_solving_shape_state(resources, player),
         Player::SolvingVioletta(_) => update_solving_violetta_state(resources, player),
+        Player::SolvingCaptcha(_) => update_solving_captcha_state(resources, player),
         Player::CashShopThenExit(cash_shop) => {
             update_cash_shop_state(resources, player, cash_shop, failed_to_detect_player);
         }
@@ -311,6 +317,7 @@ fn update_positional_state(
         | Player::ExchangingBooster(_)
         | Player::SolvingShape(_)
         | Player::SolvingVioletta(_)
+        | Player::SolvingCaptcha(_)
         | Player::CashShopThenExit(_) => unreachable!(),
     }
 }

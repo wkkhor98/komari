@@ -531,6 +531,16 @@ fn SectionOthers() -> Element {
                     checked: settings().enable_violetta_solving,
                 }
                 SettingsCheckbox {
+                    label: "Enable captcha solving",
+                    on_checked: move |enable_captcha_solving| {
+                        save_settings(Settings {
+                            enable_captcha_solving,
+                            ..settings.peek().clone()
+                        });
+                    },
+                    checked: settings().enable_captcha_solving,
+                }
+                SettingsCheckbox {
                     label: "Enable panic mode",
                     on_checked: move |enable_panic_mode| {
                         save_settings(Settings {

@@ -17,6 +17,7 @@ use crate::{
     minimap::Minimap,
     player::{
         PlayerEntity, SolvingShape, exchange_booster::ExchangingBooster,
+        solve_captcha::SolvingCaptcha,
         solve_violetta::SolvingVioletta, unstuck::Unstucking, use_booster::UsingBooster,
     },
     rng::Rng,
@@ -230,6 +231,10 @@ fn update_from_action(
 
         Some(PlayerAction::SolveVioletta) => {
             player.state = Player::SolvingVioletta(SolvingVioletta::default());
+        }
+
+        Some(PlayerAction::SolveCaptcha) => {
+            player.state = Player::SolvingCaptcha(SolvingCaptcha::default());
         }
 
         None => (),

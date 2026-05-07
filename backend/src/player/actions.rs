@@ -246,6 +246,8 @@ pub enum PlayerAction {
     SolveShape,
     /// Solves the lie detector's violetta.
     SolveVioletta,
+    /// Solves the lie detector's text captcha.
+    SolveCaptcha,
     /// Auto-mobbing action.
     #[strum(to_string = "{0}")]
     AutoMob(AutoMob),

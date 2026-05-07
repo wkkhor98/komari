@@ -156,6 +156,7 @@ pub struct RotatorBuildArgs {
     pub enable_rune_solving: bool,
     pub enable_transparent_shape_solving: bool,
     pub enable_violetta_solving: bool,
+    pub enable_captcha_solving: bool,
     pub enable_reset_normal_actions_on_erda: bool,
     pub enable_using_generic_booster: bool,
     pub enable_using_hexa_booster: bool,
@@ -831,6 +832,7 @@ impl Rotator for DefaultRotator {
             enable_rune_solving,
             enable_transparent_shape_solving,
             enable_violetta_solving,
+            enable_captcha_solving,
             enable_reset_normal_actions_on_erda,
             enable_using_generic_booster,
             enable_using_hexa_booster,
@@ -925,6 +927,10 @@ impl Rotator for DefaultRotator {
         if enable_violetta_solving {
             self.priority_actions
                 .insert(next_action_id(), solve_violetta_priority_action());
+        }
+        if enable_captcha_solving {
+            self.priority_actions
+                .insert(next_action_id(), solve_captcha_priority_action());
         }
 
         match elite_boss_behavior {
@@ -1269,6 +1275,40 @@ fn solve_violetta_priority_action() -> PriorityAction {
         condition_kind: None,
         metadata: None,
         inner: RotatorAction::Single(PlayerAction::SolveVioletta),
+        queue_to_front: true,
+        queue_info: PriorityActionQueueInfo::default(),
+    }
+}
+
+#[inline]
+fn solve_captcha_priority_action() -> PriorityAction {
+    let mut task: Option<Task<Result<bool>>> = None;
+    let task_fn = move |detector: Arc<dyn Detector>| -> Result<bool> {
+        Ok(detector.detect_lie_detector_captcha().is_ok())
+    };
+
+    PriorityAction {
+        condition: Condition(Box::new(move |resources, _, _| {
+            if resources.detector.is_none() {
+                return ConditionResult::Ignore;
+            }
+
+            match update_detection_task(resources, 3000, &mut task, task_fn) {
+                Update::Ok(true) => {
+                    info!(target: "backend/rotator", "captcha dialog detected, queuing SolveCaptcha");
+                    ConditionResult::Queue
+                }
+                Update::Err(e) => {
+                    debug!(target: "backend/rotator", "captcha detection error: {e}");
+                    ConditionResult::Ignore
+                }
+                Update::Ok(false) => ConditionResult::Ignore,
+                Update::Pending => ConditionResult::Skip,
+            }
+        })),
+        condition_kind: None,
+        metadata: None,
+        inner: RotatorAction::Single(PlayerAction::SolveCaptcha),
         queue_to_front: true,
         queue_info: PriorityActionQueueInfo::default(),
     }
@@ -1774,13 +1814,14 @@ mod tests {
             enable_rune_solving: true,
             enable_transparent_shape_solving: true,
             enable_violetta_solving: true,
+            enable_captcha_solving: true,
             enable_reset_normal_actions_on_erda: false,
             enable_using_generic_booster: false,
             enable_using_hexa_booster: false,
         };
 
         rotator.build_actions(args);
-        assert_eq!(rotator.priority_actions.len(), 11);
+        assert_eq!(rotator.priority_actions.len(), 12);
         assert_eq!(rotator.normal_actions.len(), 2);
     }
 

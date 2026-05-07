@@ -83,6 +83,7 @@ impl RotatorService for DefaultRotatorService {
         self.args.enable_rune_solving = settings.enable_rune_solving;
         self.args.enable_transparent_shape_solving = settings.enable_transparent_shape_solving;
         self.args.enable_violetta_solving = settings.enable_violetta_solving;
+        self.args.enable_captcha_solving = settings.enable_captcha_solving;
     }
 
     fn apply(&self, rotator: &mut dyn Rotator) {
