@@ -1,3 +1,5 @@
+#[cfg(debug_assertions)]
+use std::{cell::RefCell, rc::Rc};
 use std::{
     fmt::{self, Display},
     sync::atomic::{AtomicU8, Ordering},
@@ -5,9 +7,6 @@ use std::{
 
 use log::{debug, info, warn};
 use opencv::core::Rect;
-
-#[cfg(debug_assertions)]
-use std::{cell::RefCell, rc::Rc};
 
 #[cfg(debug_assertions)]
 use crate::ecs::RecordingHandle;

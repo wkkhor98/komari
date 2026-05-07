@@ -63,7 +63,11 @@ mod tests {
         let result = parse_captcha_chars("abc");
         assert_eq!(
             result,
-            vec![(false, KeyKind::A), (false, KeyKind::B), (false, KeyKind::C),]
+            vec![
+                (false, KeyKind::A),
+                (false, KeyKind::B),
+                (false, KeyKind::C),
+            ]
         );
     }
 
@@ -72,7 +76,11 @@ mod tests {
         let result = parse_captcha_chars("ABC");
         assert_eq!(
             result,
-            vec![(true, KeyKind::A), (true, KeyKind::B), (true, KeyKind::C),]
+            vec![
+                (true, KeyKind::A),
+                (true, KeyKind::B),
+                (true, KeyKind::C),
+            ]
         );
     }
 
@@ -81,7 +89,11 @@ mod tests {
         let result = parse_captcha_chars("019");
         assert_eq!(
             result,
-            vec![(false, KeyKind::Zero), (false, KeyKind::One), (false, KeyKind::Nine),]
+            vec![
+                (false, KeyKind::Zero),
+                (false, KeyKind::One),
+                (false, KeyKind::Nine),
+            ]
         );
     }
 
@@ -103,7 +115,11 @@ mod tests {
         let result = parse_captcha_chars("a!b@c");
         assert_eq!(
             result,
-            vec![(false, KeyKind::A), (false, KeyKind::B), (false, KeyKind::C),]
+            vec![
+                (false, KeyKind::A),
+                (false, KeyKind::B),
+                (false, KeyKind::C),
+            ]
         );
     }
 

@@ -1114,6 +1114,7 @@ fn priority_action(
         condition_kind: Some(condition),
         metadata: None,
         queue_to_front,
+        force_override: false,
         queue_info: PriorityActionQueueInfo::default(),
     }
 }
