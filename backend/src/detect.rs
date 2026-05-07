@@ -2415,13 +2415,13 @@ fn detect_lie_detector_captcha(
 }
 
 fn detect_lie_detector_captcha_text(bgr: &impl MatTraitConst, dialog_rect: Rect) -> Result<String> {
-    let tl = dialog_rect.tl() + Point::new(134, -30);
-    let region = Rect::from_points(tl, tl + Point::new(200, 20));
+	let tl = dialog_rect.tl() + Point::new(0, 35);
+    let region = Rect::from_points(tl, tl + Point::new(250, 22));
     let text_bgr = bgr
         .roi(region)
         .map_err(|e| anyhow!("captcha text ROI {region:?} out of bounds: {e}"))?;
 
-    let (mat_in, w_ratio, h_ratio) = preprocess_for_text_bboxes_magnified(&text_bgr, 1.0);
+    let (mat_in, w_ratio, h_ratio) = preprocess_for_text_bboxes_magnified(&text_bgr, 3.0);
     let bboxes = extract_text_bboxes(&mat_in, w_ratio, h_ratio, 0, 0);
     if bboxes.is_empty() {
         bail!("no text bboxes found in captcha region");

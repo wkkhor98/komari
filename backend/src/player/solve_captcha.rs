@@ -202,12 +202,14 @@ fn update_verifying(resources: &mut Resources, solving_captcha: &mut SolvingCapt
     if resources.detector().detect_lie_detector_captcha_success() {
         info!(target: "backend/player", "captcha solved successfully");
         FAIL_COUNT.store(0, Ordering::Relaxed);
+        resources.input.send_key(KeyKind::Enter);
         solving_captcha.state = State::Completed;
         return;
     }
 
     if resources.detector().detect_lie_detector_captcha_failure() {
         let fails = FAIL_COUNT.fetch_add(1, Ordering::Relaxed) + 1;
+        resources.input.send_key(KeyKind::Enter);
         if fails >= 2 {
             warn!(target: "backend/player", "captcha failed {fails} times, stopping bot");
             resources
