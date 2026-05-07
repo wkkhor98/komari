@@ -88,6 +88,10 @@ struct PriorityAction {
     metadata: Option<ActionMetadata>,
     /// Whether to queue this action to the front of [`Rotator::priority_actions_queue`].
     queue_to_front: bool,
+    /// Whether to override the current state regardless of [`Player::can_override_current_state`].
+    ///
+    /// Use for actions that must interrupt anything, such as captcha solving.
+    force_override: bool,
     queue_info: PriorityActionQueueInfo,
 }
 
@@ -484,9 +488,15 @@ impl DefaultRotator {
         {
             return;
         }
-        if !player
-            .state
-            .can_override_current_state(player.context.last_known_pos)
+        let next_force_overrides = self
+            .priority_actions_queue
+            .front()
+            .and_then(|id| self.priority_actions.get(id))
+            .is_some_and(|action| action.force_override);
+        if (!next_force_overrides
+            && !player
+                .state
+                .can_override_current_state(player.context.last_known_pos))
             || has_normal_linked_action_queuing_or_executing(self, &player.context)
             || has_priority_linked_action_executing(self, &player.context)
             || has_side_loaded_action_executing(&player.context)
@@ -1159,6 +1169,7 @@ fn familiar_essence_replenish_priority_action(key: KeyKind) -> PriorityAction {
             wait_after_buffered: WaitAfterBuffered::None,
         })),
         queue_to_front: true,
+        force_override: false,
         queue_info: PriorityActionQueueInfo::default(),
     }
 }
@@ -1185,6 +1196,7 @@ fn familiars_swap_priority_action(swap: FamiliarsSwap, swap_check_millis: u64) -
         metadata: None,
         inner: RotatorAction::Single(PlayerAction::FamiliarsSwap(swap)),
         queue_to_front: true,
+        force_override: false,
         queue_info: PriorityActionQueueInfo::default(),
     }
 }
@@ -1222,6 +1234,7 @@ fn solve_rune_priority_action() -> PriorityAction {
         metadata: None,
         inner: RotatorAction::Single(PlayerAction::SolveRune),
         queue_to_front: true,
+        force_override: false,
         queue_info: PriorityActionQueueInfo::default(),
     }
 }
@@ -1249,6 +1262,7 @@ fn solve_transparent_shape_priority_action() -> PriorityAction {
         metadata: None,
         inner: RotatorAction::Single(PlayerAction::SolveShape),
         queue_to_front: true,
+        force_override: false,
         queue_info: PriorityActionQueueInfo::default(),
     }
 }
@@ -1276,6 +1290,7 @@ fn solve_violetta_priority_action() -> PriorityAction {
         metadata: None,
         inner: RotatorAction::Single(PlayerAction::SolveVioletta),
         queue_to_front: true,
+        force_override: false,
         queue_info: PriorityActionQueueInfo::default(),
     }
 }
@@ -1310,6 +1325,7 @@ fn solve_captcha_priority_action() -> PriorityAction {
         metadata: None,
         inner: RotatorAction::Single(PlayerAction::SolveCaptcha),
         queue_to_front: true,
+        force_override: true,
         queue_info: PriorityActionQueueInfo::default(),
     }
 }
@@ -1396,6 +1412,7 @@ fn buff_priority_action(buff: BuffKind, key: KeyKind) -> PriorityAction {
         })),
         metadata: Some(ActionMetadata::Buff { kind: buff }),
         queue_to_front: true,
+        force_override: false,
         queue_info: PriorityActionQueueInfo::default(),
     }
 }
@@ -1423,6 +1440,7 @@ fn panic_priority_action() -> PriorityAction {
         })),
         metadata: None,
         queue_to_front: true,
+        force_override: false,
         queue_info: PriorityActionQueueInfo::default(),
     }
 }
@@ -1445,6 +1463,7 @@ fn elite_boss_change_channel_priority_action() -> PriorityAction {
         })),
         metadata: None,
         queue_to_front: true,
+        force_override: false,
         queue_info: PriorityActionQueueInfo::default(),
     }
 }
@@ -1479,6 +1498,7 @@ fn elite_boss_use_key_priority_action(key: KeyKind) -> PriorityAction {
         })),
         metadata: None,
         queue_to_front: true,
+        force_override: false,
         queue_info: PriorityActionQueueInfo::default(),
     }
 }
@@ -1535,6 +1555,7 @@ fn use_booster_priority_action(kind: Booster) -> PriorityAction {
         inner: RotatorAction::Single(PlayerAction::UseBooster(UseBooster { kind })),
         metadata: Some(ActionMetadata::UseBooster),
         queue_to_front: true,
+        force_override: false,
         queue_info: PriorityActionQueueInfo::default(),
     }
 }
@@ -1589,6 +1610,7 @@ fn exchange_hexa_booster_priority_action(
         })),
         metadata: None,
         queue_to_front: true,
+        force_override: false,
         queue_info: PriorityActionQueueInfo::default(),
     }
 }
@@ -1626,6 +1648,7 @@ fn unstuck_priority_action() -> PriorityAction {
         inner: RotatorAction::Single(PlayerAction::Unstuck),
         metadata: None,
         queue_to_front: true,
+        force_override: false,
         queue_info: PriorityActionQueueInfo::default(),
     }
 }
@@ -1914,6 +1937,7 @@ mod tests {
                 inner: RotatorAction::Single(PlayerAction::SolveRune),
                 metadata: None,
                 queue_to_front: true,
+                force_override: false,
                 queue_info: PriorityActionQueueInfo::default(),
             },
         );
@@ -1938,6 +1962,7 @@ mod tests {
                 inner: RotatorAction::Single(NORMAL_ACTION.into()),
                 metadata: None,
                 queue_to_front: false,
+                force_override: false,
                 queue_info: PriorityActionQueueInfo::default(),
             },
         );
@@ -1949,6 +1974,7 @@ mod tests {
                 inner: RotatorAction::Single(NORMAL_ACTION.into()),
                 metadata: None,
                 queue_to_front: false,
+                force_override: false,
                 queue_info: PriorityActionQueueInfo::default(),
             },
         );
@@ -1966,6 +1992,7 @@ mod tests {
                 inner: RotatorAction::Single(NORMAL_ACTION.into()),
                 metadata: None,
                 queue_to_front: true,
+                force_override: false,
                 queue_info: PriorityActionQueueInfo::default(),
             },
         );
@@ -1987,6 +2014,7 @@ mod tests {
                 inner: RotatorAction::Single(NORMAL_ACTION.into()),
                 metadata: None,
                 queue_to_front: true,
+                force_override: false,
                 queue_info: PriorityActionQueueInfo::default(),
             },
         );
@@ -2020,6 +2048,7 @@ mod tests {
                 }),
                 metadata: None,
                 queue_to_front: false,
+                force_override: false,
                 queue_info: PriorityActionQueueInfo::default(),
             },
         );
@@ -2039,6 +2068,7 @@ mod tests {
                 inner: RotatorAction::Single(PlayerAction::SolveRune),
                 metadata: None,
                 queue_to_front: true,
+                force_override: false,
                 queue_info: PriorityActionQueueInfo::default(),
             },
         );
@@ -2117,6 +2147,7 @@ mod tests {
                 inner: RotatorAction::Single(NORMAL_ACTION.into()),
                 metadata: None,
                 queue_to_front: false,
+                force_override: false,
                 queue_info: PriorityActionQueueInfo::default(),
             },
         );
@@ -2157,6 +2188,7 @@ mod tests {
                 }),
                 metadata: None,
                 queue_to_front: false,
+                force_override: false,
                 queue_info: PriorityActionQueueInfo::default(),
             },
         );
@@ -2193,6 +2225,8 @@ mod tests {
                 inner: RotatorAction::Single(NORMAL_ACTION.into()),
                 metadata: None,
                 queue_to_front: false,
+                queue_info:
+                force_override: false,
                 queue_info: PriorityActionQueueInfo {
                     last_queued_time: Some(Instant::now()),
                     ..Default::default()
@@ -2208,6 +2242,7 @@ mod tests {
                 inner: RotatorAction::Single(NORMAL_ACTION.into()),
                 metadata: None,
                 queue_to_front: false,
+                force_override: false,
                 queue_info: PriorityActionQueueInfo::default(),
             },
         );

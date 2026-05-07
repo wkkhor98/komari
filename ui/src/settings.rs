@@ -338,6 +338,19 @@ fn SectionNotifications() -> Element {
                     checked: notifications().notify_on_lie_detector_appear,
                 }
                 SettingsCheckbox {
+                    label: "Captcha solving events",
+                    on_checked: move |notify_on_captcha_solving| {
+                        save_settings(Settings {
+                            notifications: Notifications {
+                                notify_on_captcha_solving,
+                                ..notifications.peek().clone()
+                            },
+                            ..settings.peek().clone()
+                        });
+                    },
+                    checked: notifications().notify_on_captcha_solving,
+                }
+                SettingsCheckbox {
                     label: "Run timer ends",
                     on_checked: move |notify_on_run_timer_end| {
                         save_settings(Settings {

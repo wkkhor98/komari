@@ -143,6 +143,12 @@ pub struct Notifications {
     pub notify_on_lie_detector_appear: bool,
     #[serde(default)]
     pub notify_on_run_timer_end: bool,
+    #[serde(default = "notify_captcha_default")]
+    pub notify_on_captcha_solving: bool,
+}
+
+fn notify_captcha_default() -> bool {
+    true
 }
 
 #[derive(

@@ -6,6 +6,11 @@ use std::{
 use log::{debug, info, warn};
 use opencv::core::Rect;
 
+#[cfg(debug_assertions)]
+use std::{cell::RefCell, rc::Rc};
+
+#[cfg(debug_assertions)]
+use crate::ecs::RecordingHandle;
 use crate::{
     bridge::KeyKind,
     ecs::Resources,
@@ -41,6 +46,8 @@ pub struct SolvingCaptcha {
     state: State,
     dialog_rect: Rect,
     chars: Vec<(bool, KeyKind)>,
+    #[cfg(debug_assertions)]
+    recording: Option<Rc<RefCell<RecordingHandle>>>,
 }
 
 impl Display for SolvingCaptcha {
@@ -63,6 +70,11 @@ pub fn update_solving_captcha_state(resources: &mut Resources, player: &mut Play
         panic!("state is not solving captcha");
     };
 
+    #[cfg(debug_assertions)]
+    if let Some(handle) = solving_captcha.recording.as_ref() {
+        handle.borrow_mut().write(resources.detector());
+    }
+
     match solving_captcha.state {
         State::Waiting => update_waiting(resources, &mut solving_captcha),
         State::Reading => update_reading(resources, &mut solving_captcha),
@@ -72,6 +84,10 @@ pub fn update_solving_captcha_state(resources: &mut Resources, player: &mut Play
     }
 
     let player_next_state = if matches!(solving_captcha.state, State::Completed) {
+        #[cfg(debug_assertions)]
+        {
+            solving_captcha.recording = None;
+        }
         Player::Idle
     } else {
         Player::SolvingCaptcha(solving_captcha)
@@ -98,6 +114,16 @@ fn update_waiting(resources: &mut Resources, solving_captcha: &mut SolvingCaptch
             info!(target: "backend/player", "captcha dialog detected at {dialog_rect:?}");
             solving_captcha.dialog_rect = dialog_rect;
             solving_captcha.state = State::Reading;
+            resources
+                .notification
+                .schedule_notification(NotificationKind::LieDetectorCaptchaAppear);
+            #[cfg(debug_assertions)]
+            if resources.debug.auto_record_captcha {
+                use opencv::core::MatTraitConst;
+                let size = resources.detector().mat().size().unwrap();
+                solving_captcha.recording =
+                    Some(Rc::new(RefCell::new(resources.debug.new_recording(size))));
+            }
         }
         Err(e) => {
             debug!(target: "backend/player", "captcha dialog not found: {e}");

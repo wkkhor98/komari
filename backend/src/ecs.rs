@@ -35,6 +35,7 @@ impl RecordingHandle {
 pub struct Debug {
     pub auto_save_rune: bool,
     pub auto_record_lie_detector: bool,
+    pub auto_record_captcha: bool,
     last_rune_detector: Option<Arc<dyn Detector>>,
     last_rune_result: Option<[SolvedArrow; 4]>,
 }

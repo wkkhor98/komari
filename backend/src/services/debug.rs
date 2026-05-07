@@ -65,6 +65,7 @@ impl DebugService {
                 is_recording: self.writer.is_some(),
                 is_rune_auto_saving: resources.debug.auto_save_rune,
                 is_lie_detector_auto_recording: resources.debug.auto_record_lie_detector,
+                is_captcha_auto_recording: resources.debug.auto_record_captcha,
             });
         }
     }

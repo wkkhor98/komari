@@ -41,6 +41,7 @@ pub enum NotificationKind {
     PlayerIsDead,
     LieDetectorShapeAppear,
     LieDetectorViolettaAppear,
+    LieDetectorCaptchaAppear,
     LieDetectorCaptchaFailed,
     LieDetectorCaptchaOcrFailed,
     RunTimerEnded,
@@ -66,9 +67,12 @@ impl NotificationKind {
             }
             NotificationKind::LieDetectorViolettaAppear
             | NotificationKind::LieDetectorShapeAppear
-            | NotificationKind::LieDetectorCaptchaFailed
-            | NotificationKind::LieDetectorCaptchaOcrFailed => {
+            | NotificationKind::LieDetectorCaptchaAppear => {
                 settings.notifications.notify_on_lie_detector_appear
+            }
+            NotificationKind::LieDetectorCaptchaFailed
+            | NotificationKind::LieDetectorCaptchaOcrFailed => {
+                settings.notifications.notify_on_captcha_solving
             }
             NotificationKind::RunTimerEnded => settings.notifications.notify_on_run_timer_end,
         }
@@ -115,6 +119,9 @@ impl NotificationKind {
             | NotificationKind::LieDetectorShapeAppear => {
                 format!("{user_id}Bot has detected the lie detector")
             }
+            NotificationKind::LieDetectorCaptchaAppear => {
+                format!("{user_id}Bot has detected the lie detector captcha")
+            }
             NotificationKind::LieDetectorCaptchaFailed => {
                 format!("{user_id}Bot failed the captcha lie detector twice and has stopped")
             }
@@ -142,6 +149,7 @@ impl NotificationKind {
             NotificationKind::RuneAppear
             | NotificationKind::LieDetectorShapeAppear
             | NotificationKind::LieDetectorViolettaAppear
+            | NotificationKind::LieDetectorCaptchaAppear
             | NotificationKind::LieDetectorCaptchaFailed
             | NotificationKind::LieDetectorCaptchaOcrFailed => {
                 vec![ScheduledFrame::new_deadline(1)]
@@ -161,6 +169,7 @@ impl NotificationKind {
             | NotificationKind::RuneAppear => 3,
             NotificationKind::LieDetectorShapeAppear
             | NotificationKind::LieDetectorViolettaAppear
+            | NotificationKind::LieDetectorCaptchaAppear
             | NotificationKind::LieDetectorCaptchaFailed
             | NotificationKind::LieDetectorCaptchaOcrFailed => 2,
         };

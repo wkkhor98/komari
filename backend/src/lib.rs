@@ -124,6 +124,8 @@ enum Request {
     #[cfg(debug_assertions)]
     AutoRecordLieDetector(bool),
     #[cfg(debug_assertions)]
+    AutoRecordCaptcha(bool),
+    #[cfg(debug_assertions)]
     RecordVideo(bool),
     #[cfg(debug_assertions)]
     TestSpinRune,
@@ -159,6 +161,8 @@ enum Response {
     #[cfg(debug_assertions)]
     AutoRecordLieDetector,
     #[cfg(debug_assertions)]
+    AutoRecordCaptcha,
+    #[cfg(debug_assertions)]
     RecordVideo,
     #[cfg(debug_assertions)]
     TestSpinRune,
@@ -189,6 +193,7 @@ pub enum DetectionTemplate {
     HexaConvertButton,
     LieDetectorNew,
     LieDetectorOld,
+    LieDetectorCaptcha,
 }
 
 /// The four quads of a bound.
@@ -207,6 +212,7 @@ pub struct DebugState {
     pub is_recording: bool,
     pub is_rune_auto_saving: bool,
     pub is_lie_detector_auto_recording: bool,
+    pub is_captcha_auto_recording: bool,
 }
 
 /// A struct for storing current's bot state information.
@@ -407,6 +413,11 @@ pub async fn auto_save_rune(auto_save: bool) {
 #[cfg(debug_assertions)]
 pub async fn auto_record_lie_detector(auto_record: bool) {
     send_request!(AutoRecordLieDetector(auto_record))
+}
+
+#[cfg(debug_assertions)]
+pub async fn auto_record_captcha(auto_record: bool) {
+    send_request!(AutoRecordCaptcha(auto_record))
 }
 
 #[cfg(debug_assertions)]

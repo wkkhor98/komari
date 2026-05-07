@@ -224,6 +224,11 @@ fn handle_ui_request(
             Response::AutoRecordLieDetector
         }
         #[cfg(debug_assertions)]
+        Request::AutoRecordCaptcha(auto_record) => {
+            context.resources.debug.auto_record_captcha = auto_record;
+            Response::AutoRecordCaptcha
+        }
+        #[cfg(debug_assertions)]
         Request::RecordVideo(start) => {
             record_video(context, start);
             Response::RecordVideo

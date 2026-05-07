@@ -442,6 +442,17 @@ fn SectionOthers() -> Element {
                     },
                     value: localization().lie_detector_old_base64,
                 }
+                LocalizationTemplateInput {
+                    label: "Lie detector (captcha)",
+                    template: DetectionTemplate::LieDetectorCaptcha,
+                    on_value: move |image: Option<Vec<u8>>| async move {
+                        save_localization(Localization {
+                            lie_detector_captcha_base64: to_base64(image, false).await,
+                            ..localization()
+                        });
+                    },
+                    value: localization().lie_detector_captcha_base64,
+                }
             }
         }
     }
