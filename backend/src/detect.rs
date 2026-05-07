@@ -2415,7 +2415,7 @@ fn detect_lie_detector_captcha(
 }
 
 fn detect_lie_detector_captcha_text(bgr: &impl MatTraitConst, dialog_rect: Rect) -> Result<String> {
-	let tl = dialog_rect.tl() + Point::new(0, 35);
+    let tl = dialog_rect.tl() + Point::new(0, 35);
     let region = Rect::from_points(tl, tl + Point::new(250, 22));
     let text_bgr = bgr
         .roi(region)
