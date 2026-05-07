@@ -29,9 +29,9 @@ use crate::{
         exchange_booster::{ExchangingBooster, update_exchanging_booster_state},
         fall::Falling,
         grapple::Grappling,
+        solve_captcha::{SolvingCaptcha, update_solving_captcha_state},
         solve_shape::{SolvingShape, update_solving_shape_state},
         solve_violetta::{SolvingVioletta, update_solving_violetta_state},
-        solve_captcha::{SolvingCaptcha, update_solving_captcha_state},
         unstuck::Unstucking,
         use_booster::{UsingBooster, update_using_booster_state},
     },
@@ -49,10 +49,10 @@ mod idle;
 mod jump;
 mod moving;
 mod panic;
+mod solve_captcha;
 mod solve_rune;
 mod solve_shape;
 mod solve_violetta;
-mod solve_captcha;
 mod stall;
 mod state;
 mod timeout;

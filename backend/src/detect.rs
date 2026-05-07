@@ -2408,18 +2408,13 @@ fn detect_lie_detector_captcha(
 
     detect_template(
         bgr,
-        template
-            .as_ref()
-            .unwrap_or(&*LIE_DETECTOR_CAPTCHA_TEMPLATE),
+        template.as_ref().unwrap_or(&*LIE_DETECTOR_CAPTCHA_TEMPLATE),
         Point::default(),
         0.6,
     )
 }
 
-fn detect_lie_detector_captcha_text(
-    bgr: &impl MatTraitConst,
-    dialog_rect: Rect,
-) -> Result<String> {
+fn detect_lie_detector_captcha_text(bgr: &impl MatTraitConst, dialog_rect: Rect) -> Result<String> {
     let tl = dialog_rect.tl() + Point::new(134, -30);
     let region = Rect::from_points(tl, tl + Point::new(200, 20));
     let text_bgr = bgr

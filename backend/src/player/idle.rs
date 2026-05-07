@@ -17,8 +17,8 @@ use crate::{
     minimap::Minimap,
     player::{
         PlayerEntity, SolvingShape, exchange_booster::ExchangingBooster,
-        solve_captcha::SolvingCaptcha,
-        solve_violetta::SolvingVioletta, unstuck::Unstucking, use_booster::UsingBooster,
+        solve_captcha::SolvingCaptcha, solve_violetta::SolvingVioletta, unstuck::Unstucking,
+        use_booster::UsingBooster,
     },
     rng::Rng,
 };

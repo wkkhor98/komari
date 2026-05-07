@@ -58,8 +58,7 @@ fn main() {
         resources_dir.join("lie_detector_violetta_number_ideal_ratio.png");
     let lie_detector_violetta_number_mask =
         resources_dir.join("lie_detector_violetta_number_mask_ideal_ratio.png");
-    let lie_detector_captcha =
-        resources_dir.join("lie_detector_captcha_ideal_ratio.png");
+    let lie_detector_captcha = resources_dir.join("lie_detector_captcha_ideal_ratio.png");
     let lie_detector_captcha_success =
         resources_dir.join("lie_detector_captcha_success_ideal_ratio.png");
     let lie_detector_captcha_failure =

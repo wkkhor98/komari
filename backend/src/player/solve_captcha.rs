@@ -116,7 +116,9 @@ fn update_reading(resources: &mut Resources, solving_captcha: &mut SolvingCaptch
             let chars = parse_captcha_chars(&text);
             if chars.is_empty() {
                 warn!(target: "backend/player", "captcha text '{text}' parsed to no typeable keys, giving up");
-                resources.notification.schedule_notification(NotificationKind::LieDetectorCaptchaOcrFailed);
+                resources
+                    .notification
+                    .schedule_notification(NotificationKind::LieDetectorCaptchaOcrFailed);
                 solving_captcha.state = State::Completed;
             } else {
                 info!(target: "backend/player", "captcha typing {} chars", chars.len());
@@ -126,7 +128,9 @@ fn update_reading(resources: &mut Resources, solving_captcha: &mut SolvingCaptch
         }
         Err(e) => {
             warn!(target: "backend/player", "captcha OCR failed: {e}");
-            resources.notification.schedule_notification(NotificationKind::LieDetectorCaptchaOcrFailed);
+            resources
+                .notification
+                .schedule_notification(NotificationKind::LieDetectorCaptchaOcrFailed);
             solving_captcha.state = State::Completed;
         }
     }
@@ -181,7 +185,9 @@ fn update_verifying(resources: &mut Resources, solving_captcha: &mut SolvingCapt
         let fails = FAIL_COUNT.fetch_add(1, Ordering::Relaxed) + 1;
         if fails >= 2 {
             warn!(target: "backend/player", "captcha failed {fails} times, stopping bot");
-            resources.notification.schedule_notification(NotificationKind::LieDetectorCaptchaFailed);
+            resources
+                .notification
+                .schedule_notification(NotificationKind::LieDetectorCaptchaFailed);
             resources.operation.state = OperationState::Halting;
             solving_captcha.state = State::Completed;
         } else {
