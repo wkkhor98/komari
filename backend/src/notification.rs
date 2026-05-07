@@ -41,6 +41,8 @@ pub enum NotificationKind {
     PlayerIsDead,
     LieDetectorShapeAppear,
     LieDetectorViolettaAppear,
+    LieDetectorCaptchaFailed,
+    LieDetectorCaptchaOcrFailed,
     RunTimerEnded,
 }
 
@@ -63,7 +65,9 @@ impl NotificationKind {
                 settings.notifications.notify_on_player_friend_appear
             }
             NotificationKind::LieDetectorViolettaAppear
-            | NotificationKind::LieDetectorShapeAppear => {
+            | NotificationKind::LieDetectorShapeAppear
+            | NotificationKind::LieDetectorCaptchaFailed
+            | NotificationKind::LieDetectorCaptchaOcrFailed => {
                 settings.notifications.notify_on_lie_detector_appear
             }
             NotificationKind::RunTimerEnded => settings.notifications.notify_on_run_timer_end,
@@ -111,6 +115,12 @@ impl NotificationKind {
             | NotificationKind::LieDetectorShapeAppear => {
                 format!("{user_id}Bot has detected the lie detector")
             }
+            NotificationKind::LieDetectorCaptchaFailed => {
+                format!("{user_id}Bot failed the captcha lie detector twice and has stopped")
+            }
+            NotificationKind::LieDetectorCaptchaOcrFailed => {
+                format!("{user_id}Bot could not read the captcha text (OCR failed)")
+            }
             NotificationKind::RunTimerEnded => {
                 format!("{user_id}Bot run timer has ended.")
             }
@@ -131,7 +141,9 @@ impl NotificationKind {
             | NotificationKind::PlayerFriendAppear => vec![ScheduledFrame::new_deadline(2)],
             NotificationKind::RuneAppear
             | NotificationKind::LieDetectorShapeAppear
-            | NotificationKind::LieDetectorViolettaAppear => {
+            | NotificationKind::LieDetectorViolettaAppear
+            | NotificationKind::LieDetectorCaptchaFailed
+            | NotificationKind::LieDetectorCaptchaOcrFailed => {
                 vec![ScheduledFrame::new_deadline(1)]
             }
         }
@@ -148,7 +160,9 @@ impl NotificationKind {
             | NotificationKind::PlayerFriendAppear
             | NotificationKind::RuneAppear => 3,
             NotificationKind::LieDetectorShapeAppear
-            | NotificationKind::LieDetectorViolettaAppear => 2,
+            | NotificationKind::LieDetectorViolettaAppear
+            | NotificationKind::LieDetectorCaptchaFailed
+            | NotificationKind::LieDetectorCaptchaOcrFailed => 2,
         };
 
         Duration::from_secs(secs)

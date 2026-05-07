@@ -270,6 +270,9 @@ pub trait Detector: Debug + Send + Sync {
     /// Returns true when the captcha success dialog is visible.
     fn detect_lie_detector_captcha_success(&self) -> bool;
 
+    /// Returns true when the captcha failure dialog is visible.
+    fn detect_lie_detector_captcha_failure(&self) -> bool;
+
     /// Detects the state for HEXA Booster in the quick slots.
     fn detect_quick_slots_hexa_booster(&self) -> Result<QuickSlotsHexaBooster>;
 
@@ -545,6 +548,10 @@ impl Detector for DefaultDetector {
 
     fn detect_lie_detector_captcha_success(&self) -> bool {
         detect_lie_detector_captcha_success(self.bgr()).is_ok()
+    }
+
+    fn detect_lie_detector_captcha_failure(&self) -> bool {
+        detect_lie_detector_captcha_failure(self.bgr()).is_ok()
     }
 
     fn detect_quick_slots_hexa_booster(&self) -> Result<QuickSlotsHexaBooster> {
@@ -2413,11 +2420,8 @@ fn detect_lie_detector_captcha_text(
     bgr: &impl MatTraitConst,
     dialog_rect: Rect,
 ) -> Result<String> {
-    // CALIBRATE: adjust these offsets using the measurements from Task 1 Step 2.
-    // These are the pixel offsets from the template match rect top-left
-    // to the captcha character text region top-left, at your game resolution.
-    let tl = dialog_rect.tl() + Point::new(303, -112);
-    let region = Rect::from_points(tl, tl + Point::new(400, 55));
+    let tl = dialog_rect.tl() + Point::new(134, -30);
+    let region = Rect::from_points(tl, tl + Point::new(200, 20));
     let text_bgr = bgr
         .roi(region)
         .map_err(|e| anyhow!("captcha text ROI {region:?} out of bounds: {e}"))?;
@@ -2440,6 +2444,18 @@ fn detect_lie_detector_captcha_success(bgr: &impl ToInputArray) -> Result<Rect> 
     static TEMPLATE: LazyLock<Mat> = LazyLock::new(|| {
         imgcodecs::imdecode(
             include_bytes!(env!("LIE_DETECTOR_CAPTCHA_SUCCESS_TEMPLATE")),
+            IMREAD_COLOR,
+        )
+        .unwrap()
+    });
+
+    detect_template(bgr, &*TEMPLATE, Point::default(), 0.6)
+}
+
+fn detect_lie_detector_captcha_failure(bgr: &impl ToInputArray) -> Result<Rect> {
+    static TEMPLATE: LazyLock<Mat> = LazyLock::new(|| {
+        imgcodecs::imdecode(
+            include_bytes!(env!("LIE_DETECTOR_CAPTCHA_FAILURE_TEMPLATE")),
             IMREAD_COLOR,
         )
         .unwrap()

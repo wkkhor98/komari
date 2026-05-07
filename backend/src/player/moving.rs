@@ -477,6 +477,7 @@ fn update_from_action(player: &mut PlayerEntity, moving: Moving) {
         Some(
             PlayerAction::SolveShape
             | PlayerAction::SolveVioletta
+            | PlayerAction::SolveCaptcha
             | PlayerAction::Unstuck
             | PlayerAction::Panic(_)
             | PlayerAction::FamiliarsSwap(_)

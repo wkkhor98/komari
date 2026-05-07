@@ -62,6 +62,8 @@ fn main() {
         resources_dir.join("lie_detector_captcha_ideal_ratio.png");
     let lie_detector_captcha_success =
         resources_dir.join("lie_detector_captcha_success_ideal_ratio.png");
+    let lie_detector_captcha_failure =
+        resources_dir.join("lie_detector_captcha_failure_ideal_ratio.png");
 
     let rune = resources_dir.join("rune_ideal_ratio.png");
     let rune_mask = resources_dir.join("rune_mask_ideal_ratio.png");
@@ -300,6 +302,10 @@ fn main() {
     println!(
         "cargo:rustc-env=LIE_DETECTOR_CAPTCHA_SUCCESS_TEMPLATE={}",
         lie_detector_captcha_success.to_str().unwrap()
+    );
+    println!(
+        "cargo:rustc-env=LIE_DETECTOR_CAPTCHA_FAILURE_TEMPLATE={}",
+        lie_detector_captcha_failure.to_str().unwrap()
     );
     println!("cargo:rustc-env=ADMIN_TEMPLATE={}", admin.to_str().unwrap());
 

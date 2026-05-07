@@ -1,4 +1,7 @@
-use std::fmt::{self, Display};
+use std::{
+    fmt::{self, Display},
+    sync::atomic::{AtomicU8, Ordering},
+};
 
 use log::{debug, info, warn};
 use opencv::core::Rect;
@@ -6,12 +9,16 @@ use opencv::core::Rect;
 use crate::{
     bridge::KeyKind,
     ecs::Resources,
+    notification::NotificationKind,
+    operation::OperationState,
     player::{
         Player, PlayerAction, PlayerEntity, next_action,
         timeout::{Lifecycle, Timeout, next_timeout_lifecycle},
     },
     solvers::parse_captcha_chars,
 };
+
+static FAIL_COUNT: AtomicU8 = AtomicU8::new(0);
 
 const CHECK_INTERVAL: u64 = 30;
 const TYPING_INTERVAL: u32 = 8;
@@ -109,6 +116,7 @@ fn update_reading(resources: &mut Resources, solving_captcha: &mut SolvingCaptch
             let chars = parse_captcha_chars(&text);
             if chars.is_empty() {
                 warn!(target: "backend/player", "captcha text '{text}' parsed to no typeable keys, giving up");
+                resources.notification.schedule_notification(NotificationKind::LieDetectorCaptchaOcrFailed);
                 solving_captcha.state = State::Completed;
             } else {
                 info!(target: "backend/player", "captcha typing {} chars", chars.len());
@@ -118,6 +126,7 @@ fn update_reading(resources: &mut Resources, solving_captcha: &mut SolvingCaptch
         }
         Err(e) => {
             warn!(target: "backend/player", "captcha OCR failed: {e}");
+            resources.notification.schedule_notification(NotificationKind::LieDetectorCaptchaOcrFailed);
             solving_captcha.state = State::Completed;
         }
     }
@@ -163,19 +172,41 @@ fn update_verifying(resources: &mut Resources, solving_captcha: &mut SolvingCapt
 
     if resources.detector().detect_lie_detector_captcha_success() {
         info!(target: "backend/player", "captcha solved successfully");
+        FAIL_COUNT.store(0, Ordering::Relaxed);
         solving_captcha.state = State::Completed;
+        return;
+    }
+
+    if resources.detector().detect_lie_detector_captcha_failure() {
+        let fails = FAIL_COUNT.fetch_add(1, Ordering::Relaxed) + 1;
+        if fails >= 2 {
+            warn!(target: "backend/player", "captcha failed {fails} times, stopping bot");
+            resources.notification.schedule_notification(NotificationKind::LieDetectorCaptchaFailed);
+            resources.operation.state = OperationState::Halting;
+            solving_captcha.state = State::Completed;
+        } else {
+            info!(target: "backend/player", "captcha failed (attempt {fails}), waiting for new captcha to appear");
+            // Reset timeout so we get a fresh window to detect the new captcha dialog
+            solving_captcha.state = State::Verifying(Timeout::default());
+        }
+        return;
+    }
+
+    // After a failure, wait for the new captcha dialog to appear and retry
+    if FAIL_COUNT.load(Ordering::Relaxed) > 0 {
+        if let Ok(dialog_rect) = resources.detector().detect_lie_detector_captcha() {
+            info!(target: "backend/player", "new captcha dialog appeared at {dialog_rect:?}, retrying");
+            solving_captcha.dialog_rect = dialog_rect;
+            solving_captcha.state = State::Reading;
+        } else {
+            solving_captcha.state = State::Verifying(timeout);
+        }
         return;
     }
 
     match next_timeout_lifecycle(timeout, VERIFY_TIMEOUT) {
         Lifecycle::Started(timeout) | Lifecycle::Updated(timeout) => {
-            if let Ok(dialog_rect) = resources.detector().detect_lie_detector_captcha() {
-                info!(target: "backend/player", "captcha failed — new captcha at {dialog_rect:?}, retrying");
-                solving_captcha.dialog_rect = dialog_rect;
-                solving_captcha.state = State::Reading;
-            } else {
-                solving_captcha.state = State::Verifying(timeout);
-            }
+            solving_captcha.state = State::Verifying(timeout);
         }
         Lifecycle::Ended => {
             warn!(target: "backend/player", "captcha verify timed out, giving up");
