@@ -76,11 +76,7 @@ mod tests {
         let result = parse_captcha_chars("ABC");
         assert_eq!(
             result,
-            vec![
-                (true, KeyKind::A),
-                (true, KeyKind::B),
-                (true, KeyKind::C),
-            ]
+            vec![(true, KeyKind::A), (true, KeyKind::B), (true, KeyKind::C),]
         );
     }
 
