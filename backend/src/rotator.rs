@@ -2225,7 +2225,6 @@ mod tests {
                 inner: RotatorAction::Single(NORMAL_ACTION.into()),
                 metadata: None,
                 queue_to_front: false,
-                queue_info:
                 force_override: false,
                 queue_info: PriorityActionQueueInfo {
                     last_queued_time: Some(Instant::now()),
