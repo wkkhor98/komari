@@ -26,6 +26,10 @@ static FAIL_COUNT: AtomicU8 = AtomicU8::new(0);
 
 const CHECK_INTERVAL: u64 = 30;
 const TYPING_INTERVAL: u32 = 8;
+/// ~3 seconds at 30 FPS to wait after dialog detected before scanning text.
+const READING_DELAY: u32 = 90;
+/// ~0.5 seconds at 30 FPS to wait after pressing Escape before typing.
+const CLEAR_DELAY: u32 = 15;
 /// ~5 seconds at 30 FPS to wait for success/failure confirmation.
 const VERIFY_TIMEOUT: u32 = 150;
 
@@ -34,7 +38,8 @@ const VERIFY_TIMEOUT: u32 = 150;
 pub enum State {
     #[default]
     Waiting,
-    Reading,
+    Reading(Timeout),
+    Clearing(Timeout),
     Typing(Timeout, usize),
     Verifying(Timeout),
     Completed,
@@ -53,7 +58,8 @@ impl Display for SolvingCaptcha {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self.state {
             State::Waiting => write!(f, "Waiting"),
-            State::Reading => write!(f, "Reading"),
+            State::Reading(_) => write!(f, "Reading"),
+            State::Clearing(_) => write!(f, "Clearing"),
             State::Typing(_, index) => write!(f, "Typing({index})"),
             State::Verifying(_) => write!(f, "Verifying"),
             State::Completed => write!(f, "Completed"),
@@ -76,7 +82,8 @@ pub fn update_solving_captcha_state(resources: &mut Resources, player: &mut Play
 
     match solving_captcha.state {
         State::Waiting => update_waiting(resources, &mut solving_captcha),
-        State::Reading => update_reading(resources, &mut solving_captcha),
+        State::Reading(_) => update_reading(resources, &mut solving_captcha),
+        State::Clearing(_) => update_clearing(resources, &mut solving_captcha),
         State::Typing(_, _) => update_typing(resources, &mut solving_captcha),
         State::Verifying(_) => update_verifying(resources, &mut solving_captcha),
         State::Completed => unreachable!(),
@@ -112,7 +119,7 @@ fn update_waiting(resources: &mut Resources, solving_captcha: &mut SolvingCaptch
         Ok(dialog_rect) => {
             info!(target: "backend/player", "captcha dialog detected at {dialog_rect:?}");
             solving_captcha.dialog_rect = dialog_rect;
-            solving_captcha.state = State::Reading;
+            solving_captcha.state = State::Reading(Timeout::default());
             resources
                 .notification
                 .schedule_notification(NotificationKind::LieDetectorCaptchaAppear);
@@ -132,31 +139,59 @@ fn update_waiting(resources: &mut Resources, solving_captcha: &mut SolvingCaptch
 }
 
 fn update_reading(resources: &mut Resources, solving_captcha: &mut SolvingCaptcha) {
-    match resources
-        .detector()
-        .detect_lie_detector_captcha_text(solving_captcha.dialog_rect)
-    {
-        Ok(text) => {
-            info!(target: "backend/player", "captcha OCR result: '{text}'");
-            let chars = parse_captcha_chars(&text);
-            if chars.is_empty() {
-                warn!(target: "backend/player", "captcha text '{text}' parsed to no typeable keys, giving up");
-                resources
-                    .notification
-                    .schedule_notification(NotificationKind::LieDetectorCaptchaOcrFailed);
-                solving_captcha.state = State::Completed;
-            } else {
-                info!(target: "backend/player", "captcha typing {} chars", chars.len());
-                solving_captcha.chars = chars;
-                solving_captcha.state = State::Typing(Timeout::default(), 0);
+    let State::Reading(timeout) = solving_captcha.state else {
+        panic!("solving captcha state is not reading");
+    };
+
+    match next_timeout_lifecycle(timeout, READING_DELAY) {
+        Lifecycle::Started(timeout) | Lifecycle::Updated(timeout) => {
+            solving_captcha.state = State::Reading(timeout);
+        }
+        Lifecycle::Ended => {
+            match resources
+                .detector()
+                .detect_lie_detector_captcha_text(solving_captcha.dialog_rect)
+            {
+                Ok(text) => {
+                    info!(target: "backend/player", "captcha OCR result: '{text}'");
+                    let chars = parse_captcha_chars(&text);
+                    if chars.is_empty() {
+                        warn!(target: "backend/player", "captcha text '{text}' parsed to no typeable keys, giving up");
+                        resources
+                            .notification
+                            .schedule_notification(NotificationKind::LieDetectorCaptchaOcrFailed);
+                        solving_captcha.state = State::Completed;
+                    } else {
+                        info!(target: "backend/player", "captcha typing {} chars", chars.len());
+                        solving_captcha.chars = chars;
+                        resources.input.send_key(KeyKind::Escape);
+                        solving_captcha.state = State::Clearing(Timeout::default());
+                    }
+                }
+                Err(e) => {
+                    warn!(target: "backend/player", "captcha OCR failed: {e}");
+                    resources
+                        .notification
+                        .schedule_notification(NotificationKind::LieDetectorCaptchaOcrFailed);
+                    solving_captcha.state = State::Completed;
+                }
             }
         }
-        Err(e) => {
-            warn!(target: "backend/player", "captcha OCR failed: {e}");
-            resources
-                .notification
-                .schedule_notification(NotificationKind::LieDetectorCaptchaOcrFailed);
-            solving_captcha.state = State::Completed;
+    }
+}
+
+fn update_clearing(resources: &mut Resources, solving_captcha: &mut SolvingCaptcha) {
+    let State::Clearing(timeout) = solving_captcha.state else {
+        panic!("solving captcha state is not clearing");
+    };
+
+    match next_timeout_lifecycle(timeout, CLEAR_DELAY) {
+        Lifecycle::Started(timeout) | Lifecycle::Updated(timeout) => {
+            solving_captcha.state = State::Clearing(timeout);
+        }
+        Lifecycle::Ended => {
+            debug!(target: "backend/player", "captcha input cleared, starting to type");
+            solving_captcha.state = State::Typing(Timeout::default(), 0);
         }
     }
 }
@@ -230,7 +265,7 @@ fn update_verifying(resources: &mut Resources, solving_captcha: &mut SolvingCapt
         if let Ok(dialog_rect) = resources.detector().detect_lie_detector_captcha() {
             info!(target: "backend/player", "new captcha dialog appeared at {dialog_rect:?}, retrying");
             solving_captcha.dialog_rect = dialog_rect;
-            solving_captcha.state = State::Reading;
+            solving_captcha.state = State::Reading(Timeout::default());
         } else {
             solving_captcha.state = State::Verifying(timeout);
         }
