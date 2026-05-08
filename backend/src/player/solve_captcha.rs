@@ -164,7 +164,7 @@ fn update_reading(resources: &mut Resources, solving_captcha: &mut SolvingCaptch
                     } else {
                         info!(target: "backend/player", "captcha typing {} chars", chars.len());
                         solving_captcha.chars = chars;
-                        resources.input.send_key(KeyKind::Escape);
+                        resources.input.send_key(KeyKind::Esc);
                         solving_captcha.state = State::Clearing(Timeout::default());
                     }
                 }
