@@ -180,7 +180,7 @@ fn update_reading(resources: &mut Resources, solving_captcha: &mut SolvingCaptch
     }
 }
 
-fn update_clearing(resources: &mut Resources, solving_captcha: &mut SolvingCaptcha) {
+fn update_clearing(_resources: &mut Resources, solving_captcha: &mut SolvingCaptcha) {
     let State::Clearing(timeout) = solving_captcha.state else {
         panic!("solving captcha state is not clearing");
     };
