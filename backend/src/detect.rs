@@ -264,6 +264,9 @@ pub trait Detector: Debug + Send + Sync {
     /// Detects the captcha (text-input) lie detector dialog.
     fn detect_lie_detector_captcha(&self) -> Result<Rect>;
 
+    /// Detects the captcha challenge image (the scrambled text area).
+    fn detect_lie_detector_captcha_image(&self) -> Result<Rect>;
+
     /// Reads the captcha character string from within `dialog_rect`.
     fn detect_lie_detector_captcha_text(&self, dialog_rect: Rect) -> Result<String>;
 
@@ -542,6 +545,10 @@ impl Detector for DefaultDetector {
         detect_lie_detector_captcha(self.bgr(), &self.localization)
     }
 
+    fn detect_lie_detector_captcha_image(&self) -> Result<Rect> {
+        detect_lie_detector_captcha_image(self.bgr(), &self.localization)
+    }
+
     fn detect_lie_detector_captcha_text(&self, dialog_rect: Rect) -> Result<String> {
         detect_lie_detector_captcha_text(self.bgr(), dialog_rect)
     }
@@ -711,7 +718,7 @@ fn detect_player_name(bgr: &impl MatTraitConst, grayscale: &impl ToInputArray) -
     let bgr = bgr.roi(name_area)?;
 
     let (mat_in, w_ratio, h_ratio) = preprocess_for_text_bboxes(&bgr);
-    let bboxes = extract_text_bboxes(&mat_in, w_ratio, h_ratio, 0, 0);
+    let bboxes = extract_text_bboxes(&mat_in, w_ratio, h_ratio, 0, 0, 0.4);
     let name_area = name_area - name_area.tl();
     let name_bbox = bboxes
         .iter()
@@ -736,7 +743,7 @@ fn detect_player_on_screen(bgr: &impl MatTraitConst, name: String) -> Result<Rec
     let bgr = bgr.roi(player_area)?;
 
     let (mat_in, w_ratio, h_ratio) = preprocess_for_text_bboxes_magnified(&bgr, 1.0);
-    let bboxes = extract_text_bboxes(&mat_in, w_ratio, h_ratio, 0, 0);
+    let bboxes = extract_text_bboxes(&mat_in, w_ratio, h_ratio, 0, 0, 0.4);
     let texts = extract_texts(&bgr, &bboxes);
     let index = texts
         .iter()
@@ -1439,7 +1446,7 @@ fn detect_player_current_max_health_bars(
         ))
         .unwrap();
     let (left_in, left_w_ratio, left_h_ratio) = preprocess_for_text_bboxes(&left);
-    let left_bbox = extract_text_bboxes(&left_in, left_w_ratio, left_h_ratio, hp_bar.x, hp_bar.y)
+    let left_bbox = extract_text_bboxes(&left_in, left_w_ratio, left_h_ratio, hp_bar.x, hp_bar.y, 0.4)
         .into_iter()
         .min_by_key(|bbox| ((bbox.x + bbox.width) - hp_separator.x).abs())
         .ok_or(anyhow!("failed to detect current health bar"))?;
@@ -1466,6 +1473,7 @@ fn detect_player_current_max_health_bars(
         right_h_ratio,
         hp_separator.x + hp_separator.width,
         hp_bar.y,
+        0.4,
     )
     .into_iter()
     .reduce(|acc, cur| acc | cur)
@@ -2397,6 +2405,14 @@ pub static LIE_DETECTOR_CAPTCHA_TEMPLATE: LazyLock<Mat> = LazyLock::new(|| {
     .unwrap()
 });
 
+pub static LIE_DETECTOR_CAPTCHA_IMAGE_TEMPLATE: LazyLock<Mat> = LazyLock::new(|| {
+    imgcodecs::imdecode(
+        include_bytes!(env!("LIE_DETECTOR_CAPTCHA_IMAGE_TEMPLATE")),
+        IMREAD_COLOR,
+    )
+    .unwrap()
+});
+
 fn detect_lie_detector_captcha(
     bgr: &impl ToInputArray,
     localization: &Localization,
@@ -2414,19 +2430,40 @@ fn detect_lie_detector_captcha(
     )
 }
 
+fn detect_lie_detector_captcha_image(
+    bgr: &impl ToInputArray,
+    localization: &Localization,
+) -> Result<Rect> {
+    let template = localization
+        .lie_detector_captcha_image_base64
+        .as_ref()
+        .and_then(|base64| to_mat_from_base64(base64, false).ok());
+
+    detect_template(
+        bgr,
+        template.as_ref().unwrap_or(&*LIE_DETECTOR_CAPTCHA_IMAGE_TEMPLATE),
+        Point::default(),
+        0.6,
+    )
+}
+
 fn detect_lie_detector_captcha_text(bgr: &impl MatTraitConst, dialog_rect: Rect) -> Result<String> {
     let tl = dialog_rect.tl() + Point::new(134, -33);
     let region = Rect::from_points(tl, tl + Point::new(250, 25));
     let text_bgr = bgr
         .roi(region)
         .map_err(|e| anyhow!("captcha text ROI {region:?} out of bounds: {e}"))?;
+    ocr_captcha_region(&text_bgr)
+}
 
-    let (mat_in, w_ratio, h_ratio) = preprocess_for_text_bboxes_magnified(&text_bgr, 5.0);
-    let bboxes = extract_text_bboxes(&mat_in, w_ratio, h_ratio, 0, 0);
+/// Runs OCR on a pre-cropped captcha text region. Exposed for testing.
+pub fn ocr_captcha_region(text_bgr: &impl MatTraitConst) -> Result<String> {
+    let (mat_in, w_ratio, h_ratio) = preprocess_for_text_bboxes_magnified(text_bgr, 5.0);
+    let bboxes = extract_text_bboxes(&mat_in, w_ratio, h_ratio, 0, 0, 0.7);
     if bboxes.is_empty() {
         bail!("no text bboxes found in captcha region");
     }
-    let text = extract_texts(&text_bgr, &bboxes)
+    let text = extract_texts(text_bgr, &bboxes)
         .into_iter()
         .collect::<String>();
     if text.is_empty() {
@@ -2982,9 +3019,9 @@ fn extract_text_bboxes(
     h_ratio: f32,
     x_offset: i32,
     y_offset: i32,
+    link_score_threshold: f64,
 ) -> Vec<Rect> {
     const TEXT_SCORE_THRESHOLD: f64 = 0.7;
-    const LINK_SCORE_THRESHOLD: f64 = 0.4;
     static TEXT_DETECTION_MODEL: LazyLock<Mutex<Session>> = LazyLock::new(|| {
         Mutex::new(
             build_session(include_bytes!(env!("TEXT_DETECTION_MODEL")))
@@ -3012,7 +3049,7 @@ fn extract_text_bboxes(
     threshold(
         &text_score,
         &mut text_low_score,
-        LINK_SCORE_THRESHOLD,
+        link_score_threshold,
         1.0,
         THRESH_BINARY,
     )
@@ -3032,7 +3069,7 @@ fn extract_text_bboxes(
     // SAFETY: can be modified in place
     unsafe {
         link_score.modify_inplace(|mat, mat_mut| {
-            threshold(mat, mat_mut, LINK_SCORE_THRESHOLD, 1.0, THRESH_BINARY).unwrap();
+            threshold(mat, mat_mut, link_score_threshold, 1.0, THRESH_BINARY).unwrap();
         });
     }
 

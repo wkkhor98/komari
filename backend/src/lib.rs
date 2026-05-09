@@ -194,6 +194,7 @@ pub enum DetectionTemplate {
     LieDetectorNew,
     LieDetectorOld,
     LieDetectorCaptcha,
+    LieDetectorCaptchaImage,
 }
 
 /// The four quads of a bound.
