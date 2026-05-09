@@ -3497,3 +3497,59 @@ fn build_session(model: &[u8]) -> Result<Session> {
         .with_execution_providers([CUDAExecutionProvider::default().build()])?
         .commit_from_memory(model)?)
 }
+
+#[cfg(test)]
+mod tests {
+    use std::path::PathBuf;
+
+    use opencv::imgcodecs::{IMREAD_COLOR, imread};
+
+    use super::ocr_captcha_region;
+
+    fn captcha_test_image(name: &str) -> PathBuf {
+        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("resources")
+            .join("captcha_test")
+            .join(name)
+    }
+
+    #[test]
+    fn ocr_captcha_sample_1() {
+        let img = imread(
+            captcha_test_image("sample_1.png").to_str().unwrap(),
+            IMREAD_COLOR,
+        )
+        .unwrap();
+        assert_eq!(ocr_captcha_region(&img).unwrap(), "vtuutwezrZ");
+    }
+
+    #[test]
+    fn ocr_captcha_sample_2() {
+        let img = imread(
+            captcha_test_image("sample_2.png").to_str().unwrap(),
+            IMREAD_COLOR,
+        )
+        .unwrap();
+        assert_eq!(ocr_captcha_region(&img).unwrap(), "xQthUPBrLT");
+    }
+
+    #[test]
+    fn ocr_captcha_sample_3() {
+        let img = imread(
+            captcha_test_image("sample_3.png").to_str().unwrap(),
+            IMREAD_COLOR,
+        )
+        .unwrap();
+        assert_eq!(ocr_captcha_region(&img).unwrap(), "MQiiWSQFQo");
+    }
+
+    #[test]
+    fn ocr_captcha_sample_4() {
+        let img = imread(
+            captcha_test_image("sample_4.png").to_str().unwrap(),
+            IMREAD_COLOR,
+        )
+        .unwrap();
+        assert_eq!(ocr_captcha_region(&img).unwrap(), "fGVstXcbrb");
+    }
+}
