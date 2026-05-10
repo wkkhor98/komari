@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use backend::detect::ocr_captcha_region;
+use backend::ocr_captcha_region;
 use opencv::imgcodecs::{IMREAD_COLOR, imread};
 
 fn main() {

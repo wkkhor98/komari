@@ -53,6 +53,7 @@ mod utils;
 
 pub use {
     database::{DatabaseEvent, database_event_receiver},
+    detect::ocr_captcha_region,
     models::*,
     pathing::MAX_PLATFORMS_COUNT,
     run::init,
