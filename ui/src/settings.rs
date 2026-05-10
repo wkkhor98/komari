@@ -512,6 +512,20 @@ fn SectionOthers() -> Element {
 
     rsx! {
         Section { title: "Others",
+            div { class: "grid grid-cols-3 gap-3",
+                SettingsTextInput {
+                    text_label: "Gemini API key",
+                    button_label: "Update",
+                    sensitive: true,
+                    on_value: move |value: String| {
+                        save_settings(Settings {
+                            gemini_api_key: if value.is_empty() { None } else { Some(value) },
+                            ..settings.peek().clone()
+                        });
+                    },
+                    value: settings().gemini_api_key.unwrap_or_default(),
+                }
+            }
             div { class: "grid grid-cols-2 gap-3",
                 SettingsCheckbox {
                     label: "Enable rune solving",

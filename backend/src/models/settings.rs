@@ -36,6 +36,8 @@ pub struct Settings {
     pub platform_end_key: KeyBindingConfiguration,
     #[serde(default = "platform_add_key_default")]
     pub platform_add_key: KeyBindingConfiguration,
+    #[serde(default)]
+    pub gemini_api_key: Option<String>,
 }
 
 impl Default for Settings {
@@ -59,6 +61,7 @@ impl Default for Settings {
             platform_start_key: platform_start_key_default(),
             platform_end_key: platform_end_key_default(),
             platform_add_key: platform_add_key_default(),
+            gemini_api_key: None,
         }
     }
 }

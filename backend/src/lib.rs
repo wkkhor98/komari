@@ -32,6 +32,7 @@ mod database;
 mod debug;
 mod detect;
 mod ecs;
+mod gemini;
 mod grpc;
 mod mat;
 mod minimap;

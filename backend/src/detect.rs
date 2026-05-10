@@ -37,7 +37,7 @@ use ort::{
 use strsim::jaro_winkler;
 
 use crate::mat::OwnedMat;
-use crate::{bridge::KeyKind, models::Localization};
+use crate::{bridge::KeyKind, gemini::GeminiClient, models::Localization};
 
 #[derive(Debug, Copy, Clone)]
 pub struct Arrow {
@@ -2465,21 +2465,19 @@ fn detect_lie_detector_captcha_text(bgr: &impl MatTraitConst, dialog_rect: Rect)
     ocr_captcha_region(&text_bgr)
 }
 
-/// Runs OCR on a pre-cropped captcha text region. Exposed for testing.
+/// Runs OCR on a pre-cropped captcha text region via the Gemini Flash API.
+///
+/// Requires the `GEMINI_API_KEY` environment variable to be set.
 pub fn ocr_captcha_region(text_bgr: &impl MatTraitConst) -> Result<String> {
-    // The captcha region is already pre-cropped to just the text band — CRAFT detection
-    // is not needed and actually hurts accuracy on these small images because the captcha
-    // font produces text_score < 0.7, causing characters to be silently dropped.
-    // Feed the full region directly to the recognizer.
-    let size = text_bgr.size()?;
-    let full_bbox = Rect::new(0, 0, size.width, size.height);
-    let text = extract_texts(text_bgr, &[full_bbox])
-        .into_iter()
-        .collect::<String>();
-    if text.is_empty() {
-        bail!("no text extracted from captcha region");
-    }
-    Ok(text)
+    let mut png_buf = opencv::core::Vector::<u8>::default();
+    opencv::imgcodecs::imencode(
+        ".png",
+        text_bgr,
+        &mut png_buf,
+        &opencv::core::Vector::default(),
+    )?;
+    let client = GeminiClient::new()?;
+    client.recognize(png_buf.as_slice())
 }
 
 fn detect_lie_detector_captcha_success(bgr: &impl ToInputArray) -> Result<Rect> {

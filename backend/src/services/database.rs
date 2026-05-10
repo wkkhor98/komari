@@ -24,6 +24,7 @@ impl EventHandler<DatabaseEvent> for DatabaseEventHandler {
                 context.rotator_service.apply(context.rotator);
 
                 update_capture_and_input(context);
+                crate::gemini::set_api_key(settings.gemini_api_key.clone());
             }
             DatabaseEvent::LocalizationUpdated(localization) => context
                 .localization_service

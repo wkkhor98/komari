@@ -76,6 +76,7 @@ pub fn init() {
 
 fn systems_loop() {
     let settings = Rc::new(RefCell::new(query_settings()));
+    crate::gemini::set_api_key(settings.borrow().gemini_api_key.clone());
     let localization = Rc::new(RefCell::new(Arc::new(query_or_upsert_localization())));
     let seeds = query_and_upsert_seeds();
     let rng = Rng::new(seeds.rng_seed, seeds.perlin_seed);
