@@ -60,7 +60,7 @@ impl<T> Task<T> {
         self.handle.abort();
     }
 
-    fn poll_inner(&mut self) -> Option<T> {
+    pub(crate) fn poll_inner(&mut self) -> Option<T> {
         if self.rx.is_terminated() {
             return None;
         }
