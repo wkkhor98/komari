@@ -71,3 +71,13 @@ runs:
       uses: KyleMayes/install-llvm-action@v2
       with:
         version: "21"
+
+    - name: Download ONNX Runtime 1.22.0
+      shell: pwsh
+      run: |
+        $version = "1.22.0"
+        $url = "https://github.com/microsoft/onnxruntime/releases/download/v${version}/onnxruntime-win-x64-${version}.zip"
+        Invoke-WebRequest -Uri $url -OutFile "onnxruntime.zip"
+        Expand-Archive "onnxruntime.zip" -DestinationPath "$env:GITHUB_WORKSPACE\onnxruntime"
+        $dll = "$env:GITHUB_WORKSPACE\onnxruntime\onnxruntime-win-x64-${version}\lib\onnxruntime.dll"
+        Add-Content $env:GITHUB_ENV "ORT_DYLIB_PATH=$dll"
