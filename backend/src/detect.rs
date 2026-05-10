@@ -2467,27 +2467,13 @@ fn detect_lie_detector_captcha_text(bgr: &impl MatTraitConst, dialog_rect: Rect)
 
 /// Runs OCR on a pre-cropped captcha text region. Exposed for testing.
 pub fn ocr_captcha_region(text_bgr: &impl MatTraitConst) -> Result<String> {
-    let (mat_in, w_ratio, h_ratio) = preprocess_for_text_bboxes_magnified(text_bgr, 5.0);
-    let bboxes = extract_text_bboxes(&mat_in, w_ratio, h_ratio, 0, 0, 0.7);
-    if bboxes.is_empty() {
-        bail!("no text bboxes found in captcha region");
-    }
-    // Merge all character-level bboxes into one word-level region before recognition.
-    // CRAFT on small captcha images produces per-character bboxes with weak link scores;
-    // recognizing each tiny crop separately gives garbage. The union covers the full text band.
-    let union_bbox = bboxes
-        .iter()
-        .copied()
-        .reduce(|a, b| a | b)
-        .expect("bboxes non-empty");
+    // The captcha region is already pre-cropped to just the text band — CRAFT detection
+    // is not needed and actually hurts accuracy on these small images because the captcha
+    // font produces text_score < 0.7, causing characters to be silently dropped.
+    // Feed the full region directly to the recognizer.
     let size = text_bgr.size()?;
-    let clamped = Rect::new(
-        union_bbox.x.max(0),
-        union_bbox.y.max(0),
-        union_bbox.width.min(size.width - union_bbox.x.max(0)),
-        union_bbox.height.min(size.height - union_bbox.y.max(0)),
-    );
-    let text = extract_texts(text_bgr, &[clamped])
+    let full_bbox = Rect::new(0, 0, size.width, size.height);
+    let text = extract_texts(text_bgr, &[full_bbox])
         .into_iter()
         .collect::<String>();
     if text.is_empty() {
