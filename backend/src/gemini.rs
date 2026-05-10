@@ -8,8 +8,7 @@ use serde_json::json;
 const GEMINI_URL: &str =
     "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent";
 
-const PROMPT: &str =
-    "Return only the exact characters visible in this image, with no spaces, \
+const PROMPT: &str = "Return only the exact characters visible in this image, with no spaces, \
      punctuation, or explanation. The text is alphanumeric and case-sensitive.";
 
 static SETTINGS_API_KEY: Mutex<Option<String>> = Mutex::new(None);
@@ -60,11 +59,7 @@ impl GeminiClient {
             }]
         });
 
-        let response = self
-            .client
-            .post(&url)
-            .json(&body)
-            .send()?;
+        let response = self.client.post(&url).json(&body).send()?;
 
         if !response.status().is_success() {
             bail!("Gemini API error: HTTP {}", response.status());
@@ -93,7 +88,10 @@ mod tests {
         std::env::remove_var("GEMINI_API_KEY");
         set_api_key(None);
         let result = GeminiClient::new();
-        assert!(result.is_err(), "expected Err when no API key is configured");
+        assert!(
+            result.is_err(),
+            "expected Err when no API key is configured"
+        );
     }
 
     #[test]
