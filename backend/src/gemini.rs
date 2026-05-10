@@ -85,7 +85,8 @@ mod tests {
 
     #[test]
     fn new_returns_err_when_no_key_configured() {
-        std::env::remove_var("GEMINI_API_KEY");
+        // SAFETY: single-threaded test environment, no concurrent env reads
+        unsafe { std::env::remove_var("GEMINI_API_KEY") };
         set_api_key(None);
         let result = GeminiClient::new();
         assert!(
