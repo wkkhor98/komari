@@ -2468,7 +2468,7 @@ fn detect_lie_detector_captcha_text(bgr: &impl MatTraitConst, dialog_rect: Rect)
 /// Runs OCR on a pre-cropped captcha text region via the Gemini Flash API.
 ///
 /// Requires the `GEMINI_API_KEY` environment variable to be set.
-pub fn ocr_captcha_region(text_bgr: &impl MatTraitConst) -> Result<String> {
+pub fn ocr_captcha_region(text_bgr: &(impl MatTraitConst + ToInputArray)) -> Result<String> {
     let mut png_buf = opencv::core::Vector::<u8>::default();
     opencv::imgcodecs::imencode(
         ".png",
