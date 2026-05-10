@@ -2472,7 +2472,22 @@ pub fn ocr_captcha_region(text_bgr: &impl MatTraitConst) -> Result<String> {
     if bboxes.is_empty() {
         bail!("no text bboxes found in captcha region");
     }
-    let text = extract_texts(text_bgr, &bboxes)
+    // Merge all character-level bboxes into one word-level region before recognition.
+    // CRAFT on small captcha images produces per-character bboxes with weak link scores;
+    // recognizing each tiny crop separately gives garbage. The union covers the full text band.
+    let union_bbox = bboxes
+        .iter()
+        .copied()
+        .reduce(|a, b| a | b)
+        .expect("bboxes non-empty");
+    let size = text_bgr.size()?;
+    let clamped = Rect::new(
+        union_bbox.x.max(0),
+        union_bbox.y.max(0),
+        union_bbox.width.min(size.width - union_bbox.x.max(0)),
+        union_bbox.height.min(size.height - union_bbox.y.max(0)),
+    );
+    let text = extract_texts(text_bgr, &[clamped])
         .into_iter()
         .collect::<String>();
     if text.is_empty() {
@@ -3529,7 +3544,7 @@ mod tests {
             IMREAD_COLOR,
         )
         .unwrap();
-        assert_eq!(ocr_captcha_region(&img).unwrap(), "vtuutwezrZ");
+        assert_eq!(ocr_captcha_region(&img).unwrap(), "KsAXcwvgUQ");
     }
 
     #[test]
@@ -3539,7 +3554,7 @@ mod tests {
             IMREAD_COLOR,
         )
         .unwrap();
-        assert_eq!(ocr_captcha_region(&img).unwrap(), "xQthUPBrLT");
+        assert_eq!(ocr_captcha_region(&img).unwrap(), "EjvYkkFfEB");
     }
 
     #[test]
@@ -3549,7 +3564,7 @@ mod tests {
             IMREAD_COLOR,
         )
         .unwrap();
-        assert_eq!(ocr_captcha_region(&img).unwrap(), "MQiiWSQFQo");
+        assert_eq!(ocr_captcha_region(&img).unwrap(), "YUaSeDsDjx");
     }
 
     #[test]
@@ -3559,6 +3574,6 @@ mod tests {
             IMREAD_COLOR,
         )
         .unwrap();
-        assert_eq!(ocr_captcha_region(&img).unwrap(), "fGVstXcbrb");
+        assert_eq!(ocr_captcha_region(&img).unwrap(), "KskVmodvmS");
     }
 }
