@@ -1446,10 +1446,17 @@ fn detect_player_current_max_health_bars(
         ))
         .unwrap();
     let (left_in, left_w_ratio, left_h_ratio) = preprocess_for_text_bboxes(&left);
-    let left_bbox = extract_text_bboxes(&left_in, left_w_ratio, left_h_ratio, hp_bar.x, hp_bar.y, 0.4)
-        .into_iter()
-        .min_by_key(|bbox| ((bbox.x + bbox.width) - hp_separator.x).abs())
-        .ok_or(anyhow!("failed to detect current health bar"))?;
+    let left_bbox = extract_text_bboxes(
+        &left_in,
+        left_w_ratio,
+        left_h_ratio,
+        hp_bar.x,
+        hp_bar.y,
+        0.4,
+    )
+    .into_iter()
+    .min_by_key(|bbox| ((bbox.x + bbox.width) - hp_separator.x).abs())
+    .ok_or(anyhow!("failed to detect current health bar"))?;
     let left_bbox_x = hp_shield.map_or(left_bbox.x, |bbox| bbox.x + bbox.width); // When there is shield, skips past it
     let left_bbox = Rect::new(
         left_bbox_x,
@@ -2441,7 +2448,9 @@ fn detect_lie_detector_captcha_image(
 
     detect_template(
         bgr,
-        template.as_ref().unwrap_or(&*LIE_DETECTOR_CAPTCHA_IMAGE_TEMPLATE),
+        template
+            .as_ref()
+            .unwrap_or(&*LIE_DETECTOR_CAPTCHA_IMAGE_TEMPLATE),
         Point::default(),
         0.6,
     )
