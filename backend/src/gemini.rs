@@ -6,7 +6,7 @@ use reqwest::blocking::Client;
 use serde_json::json;
 
 const GEMINI_URL: &str =
-    "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent";
+    "https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent";
 
 const PROMPT: &str = "Return only the exact characters visible in this image, with no spaces, \
      punctuation, or explanation. The text is alphanumeric and case-sensitive.";

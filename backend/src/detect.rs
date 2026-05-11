@@ -3508,14 +3508,11 @@ fn build_session(model: &[u8]) -> Result<Session> {
 
 #[cfg(test)]
 mod tests {
-    use std::{path::PathBuf, sync::Mutex};
+    use std::path::PathBuf;
 
     use opencv::imgcodecs::{IMREAD_COLOR, imread};
 
     use super::ocr_captcha_region;
-
-    // Gemini free tier rate-limits concurrent requests; serialize all OCR tests.
-    static OCR_LOCK: Mutex<()> = Mutex::new(());
 
     fn captcha_test_image(name: &str) -> PathBuf {
         PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -3525,8 +3522,8 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "requires GEMINI_API_KEY; run locally with: cargo test -- --ignored"]
     fn ocr_captcha_sample_1() {
-        let _guard = OCR_LOCK.lock().unwrap();
         let img = imread(
             captcha_test_image("sample_1.png").to_str().unwrap(),
             IMREAD_COLOR,
@@ -3536,8 +3533,8 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "requires GEMINI_API_KEY; run locally with: cargo test -- --ignored"]
     fn ocr_captcha_sample_2() {
-        let _guard = OCR_LOCK.lock().unwrap();
         let img = imread(
             captcha_test_image("sample_2.png").to_str().unwrap(),
             IMREAD_COLOR,
@@ -3547,8 +3544,8 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "requires GEMINI_API_KEY; run locally with: cargo test -- --ignored"]
     fn ocr_captcha_sample_3() {
-        let _guard = OCR_LOCK.lock().unwrap();
         let img = imread(
             captcha_test_image("sample_3.png").to_str().unwrap(),
             IMREAD_COLOR,
@@ -3558,8 +3555,8 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "requires GEMINI_API_KEY; run locally with: cargo test -- --ignored"]
     fn ocr_captcha_sample_4() {
-        let _guard = OCR_LOCK.lock().unwrap();
         let img = imread(
             captcha_test_image("sample_4.png").to_str().unwrap(),
             IMREAD_COLOR,
