@@ -12,6 +12,7 @@ use log::{debug, error, info};
 use mockall::automock;
 use opencv::{
     boxed_ref::BoxedRef,
+    prelude::VectorToVec,
     core::{
         BORDER_CONSTANT, CMP_EQ, CMP_GT, CV_8U, CV_32FC3, CV_32S, Mat, MatExprTraitConst, MatTrait,
         MatTraitConst, MatTraitConstManual, ModifyInplace, Point, Range, Rect, Scalar, Size,
