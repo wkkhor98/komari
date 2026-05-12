@@ -29,10 +29,10 @@ static NOTIFIED: AtomicBool = AtomicBool::new(false);
 
 const CHECK_INTERVAL: u64 = 30;
 const TYPING_INTERVAL: u32 = 8;
-/// ~3 seconds at 30 FPS to wait after dialog detected before pressing Escape.
-const INITIAL_DELAY: u32 = 90;
-/// ~0.5 seconds at 30 FPS to wait after image appears before OCR.
-const SETTLE_DELAY: u32 = 15;
+/// ~0.5 seconds at 30 FPS to wait after dialog detected before pressing Escape.
+const INITIAL_DELAY: u32 = 15;
+/// ~3 seconds at 30 FPS to wait after image appears before OCR.
+const SETTLE_DELAY: u32 = 90;
 /// ~5 seconds at 30 FPS to wait for success/failure confirmation.
 const VERIFY_TIMEOUT: u32 = 150;
 
@@ -59,7 +59,7 @@ pub struct SolvingCaptcha {
     state: State,
     dialog_rect: Rect,
     chars: Vec<(bool, KeyKind)>,
-    ocr_task: Rc<RefCell<Option<Task<Result<String>>>>>,
+    ocr_task: Rc<RefCell<Option<Task<Result<(String, Vec<u8>)>>>>>,
     #[cfg(debug_assertions)]
     recording: Option<Rc<RefCell<RecordingHandle>>>,
 }
@@ -228,8 +228,12 @@ fn update_ocring(resources: &mut Resources, solving_captcha: &mut SolvingCaptcha
     };
 
     match update {
-        Update::Ok(text) => {
+        Update::Ok((text, png_bytes)) => {
             info!(target: "backend/player", "captcha OCR result: '{text}'");
+            resources.notification.schedule_notification_with_image(
+                NotificationKind::LieDetectorCaptchaImage,
+                png_bytes,
+            );
             let chars = parse_captcha_chars(&text);
             if chars.is_empty() {
                 warn!(target: "backend/player", "captcha text '{text}' parsed to no typeable keys, going back to wait for image");

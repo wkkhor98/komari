@@ -27,7 +27,7 @@ fn main() {
         let img = imread(path.to_str().unwrap(), IMREAD_COLOR).unwrap();
 
         match ocr_captcha_region(&img) {
-            Ok(got) => {
+            Ok((got, _)) => {
                 let pass = got == *expected;
                 let status = if pass { "PASS" } else { "FAIL" };
                 println!("[{status}] {filename}: got={got:?} expected={expected:?}");

@@ -268,7 +268,8 @@ pub trait Detector: Debug + Send + Sync {
     fn detect_lie_detector_captcha_image(&self) -> Result<Rect>;
 
     /// Reads the captcha character string from within `dialog_rect`.
-    fn detect_lie_detector_captcha_text(&self, dialog_rect: Rect) -> Result<String>;
+    /// Returns `(text, png_bytes)` where `png_bytes` is the cropped image sent to the OCR API.
+    fn detect_lie_detector_captcha_text(&self, dialog_rect: Rect) -> Result<(String, Vec<u8>)>;
 
     /// Returns true when the captcha success dialog is visible.
     fn detect_lie_detector_captcha_success(&self) -> bool;
@@ -549,7 +550,7 @@ impl Detector for DefaultDetector {
         detect_lie_detector_captcha_image(self.bgr(), &self.localization)
     }
 
-    fn detect_lie_detector_captcha_text(&self, dialog_rect: Rect) -> Result<String> {
+    fn detect_lie_detector_captcha_text(&self, dialog_rect: Rect) -> Result<(String, Vec<u8>)> {
         detect_lie_detector_captcha_text(self.bgr(), dialog_rect)
     }
 
@@ -2456,7 +2457,10 @@ fn detect_lie_detector_captcha_image(
     )
 }
 
-fn detect_lie_detector_captcha_text(bgr: &impl MatTraitConst, dialog_rect: Rect) -> Result<String> {
+fn detect_lie_detector_captcha_text(
+    bgr: &impl MatTraitConst,
+    dialog_rect: Rect,
+) -> Result<(String, Vec<u8>)> {
     let tl = dialog_rect.tl() + Point::new(134, -33);
     let region = Rect::from_points(tl, tl + Point::new(250, 25));
     let text_bgr = bgr
@@ -2468,7 +2472,9 @@ fn detect_lie_detector_captcha_text(bgr: &impl MatTraitConst, dialog_rect: Rect)
 /// Runs OCR on a pre-cropped captcha text region via the Gemini Flash API.
 ///
 /// Requires the `GEMINI_API_KEY` environment variable to be set.
-pub fn ocr_captcha_region(text_bgr: &(impl MatTraitConst + ToInputArray)) -> Result<String> {
+pub fn ocr_captcha_region(
+    text_bgr: &(impl MatTraitConst + ToInputArray),
+) -> Result<(String, Vec<u8>)> {
     let mut png_buf = opencv::core::Vector::<u8>::default();
     opencv::imgcodecs::imencode(
         ".png",
@@ -2476,8 +2482,10 @@ pub fn ocr_captcha_region(text_bgr: &(impl MatTraitConst + ToInputArray)) -> Res
         &mut png_buf,
         &opencv::core::Vector::default(),
     )?;
+    let png_bytes = png_buf.to_vec();
     let client = GeminiClient::new()?;
-    client.recognize(png_buf.as_slice())
+    let text = client.recognize(&png_bytes)?;
+    Ok((text, png_bytes))
 }
 
 fn detect_lie_detector_captcha_success(bgr: &impl ToInputArray) -> Result<Rect> {
@@ -3529,7 +3537,7 @@ mod tests {
             IMREAD_COLOR,
         )
         .unwrap();
-        assert_eq!(ocr_captcha_region(&img).unwrap(), "KsAXcwvgUQ");
+        assert_eq!(ocr_captcha_region(&img).unwrap().0, "KsAXcwvgUQ");
     }
 
     #[test]
@@ -3540,7 +3548,7 @@ mod tests {
             IMREAD_COLOR,
         )
         .unwrap();
-        assert_eq!(ocr_captcha_region(&img).unwrap(), "EjvYkkFfEB");
+        assert_eq!(ocr_captcha_region(&img).unwrap().0, "EjvYkkFfEB");
     }
 
     #[test]
@@ -3551,7 +3559,7 @@ mod tests {
             IMREAD_COLOR,
         )
         .unwrap();
-        assert_eq!(ocr_captcha_region(&img).unwrap(), "YUaSeDsDjx");
+        assert_eq!(ocr_captcha_region(&img).unwrap().0, "YUaSeDsDjx");
     }
 
     #[test]
@@ -3562,6 +3570,6 @@ mod tests {
             IMREAD_COLOR,
         )
         .unwrap();
-        assert_eq!(ocr_captcha_region(&img).unwrap(), "KskVmodvmS");
+        assert_eq!(ocr_captcha_region(&img).unwrap().0, "KskVmodvmS");
     }
 }

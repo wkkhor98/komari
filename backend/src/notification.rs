@@ -45,6 +45,7 @@ pub enum NotificationKind {
     LieDetectorCaptchaSolved,
     LieDetectorCaptchaFailed,
     LieDetectorCaptchaOcrFailed,
+    LieDetectorCaptchaImage,
     RunTimerEnded,
 }
 
@@ -73,7 +74,8 @@ impl NotificationKind {
             }
             NotificationKind::LieDetectorCaptchaSolved
             | NotificationKind::LieDetectorCaptchaFailed
-            | NotificationKind::LieDetectorCaptchaOcrFailed => {
+            | NotificationKind::LieDetectorCaptchaOcrFailed
+            | NotificationKind::LieDetectorCaptchaImage => {
                 settings.notifications.notify_on_captcha_solving
             }
             NotificationKind::RunTimerEnded => settings.notifications.notify_on_run_timer_end,
@@ -133,6 +135,9 @@ impl NotificationKind {
             NotificationKind::LieDetectorCaptchaOcrFailed => {
                 format!("{user_id}Bot could not read the captcha text (OCR failed)")
             }
+            NotificationKind::LieDetectorCaptchaImage => {
+                format!("{user_id}Captcha image being sent to OCR")
+            }
             NotificationKind::RunTimerEnded => {
                 format!("{user_id}Bot run timer has ended.")
             }
@@ -157,7 +162,8 @@ impl NotificationKind {
             | NotificationKind::LieDetectorCaptchaAppear
             | NotificationKind::LieDetectorCaptchaSolved
             | NotificationKind::LieDetectorCaptchaFailed
-            | NotificationKind::LieDetectorCaptchaOcrFailed => {
+            | NotificationKind::LieDetectorCaptchaOcrFailed
+            | NotificationKind::LieDetectorCaptchaImage => {
                 vec![ScheduledFrame::new_deadline(1)]
             }
         }
@@ -178,7 +184,8 @@ impl NotificationKind {
             | NotificationKind::LieDetectorCaptchaAppear
             | NotificationKind::LieDetectorCaptchaSolved
             | NotificationKind::LieDetectorCaptchaFailed
-            | NotificationKind::LieDetectorCaptchaOcrFailed => 2,
+            | NotificationKind::LieDetectorCaptchaOcrFailed
+            | NotificationKind::LieDetectorCaptchaImage => 2,
         };
 
         Duration::from_secs(secs)
@@ -269,10 +276,18 @@ impl Notification {
     }
 
     pub fn schedule_notification(&self, kind: NotificationKind) {
-        let _ = self.schedule_notification_inner(kind);
+        let _ = self.schedule_notification_inner(kind, None);
     }
 
-    fn schedule_notification_inner(&self, kind: NotificationKind) -> Result<(), Error> {
+    pub fn schedule_notification_with_image(&self, kind: NotificationKind, png_bytes: Vec<u8>) {
+        let _ = self.schedule_notification_inner(kind, Some(png_bytes));
+    }
+
+    fn schedule_notification_inner(
+        &self,
+        kind: NotificationKind,
+        image: Option<Vec<u8>>,
+    ) -> Result<(), Error> {
         let settings = self.settings.borrow();
         if !kind.enabled(&settings) {
             bail!("notification not enabled");
@@ -290,7 +305,14 @@ impl Notification {
             };
 
             let content = kind.content(&settings);
-            let frames = kind.scheduled_frames();
+            let frames = if let Some(png_bytes) = image {
+                vec![ScheduledFrame {
+                    inner: Some(png_bytes),
+                    deadline_secs: u32::MAX,
+                }]
+            } else {
+                kind.scheduled_frames()
+            };
             let mut scheduled = self.scheduled.lock().unwrap();
             scheduled.push(ScheduledNotification {
                 instant: Instant::now(),
@@ -450,7 +472,7 @@ mod test {
         })));
 
         assert!(
-            noti.schedule_notification_inner(NotificationKind::FailOrMapChange)
+            noti.schedule_notification_inner(NotificationKind::FailOrMapChange, None)
                 .is_ok()
         );
         assert!(noti.scheduled.lock().unwrap().len() == 1);
@@ -462,11 +484,11 @@ mod test {
                 .unwrap()
         );
         assert!(
-            noti.schedule_notification_inner(NotificationKind::FailOrMapChange)
+            noti.schedule_notification_inner(NotificationKind::FailOrMapChange, None)
                 .is_err()
         );
         assert!(
-            noti.schedule_notification_inner(NotificationKind::RuneAppear)
+            noti.schedule_notification_inner(NotificationKind::RuneAppear, None)
                 .is_ok()
         );
     }
@@ -482,7 +504,7 @@ mod test {
         })));
 
         assert!(
-            noti.schedule_notification_inner(NotificationKind::FailOrMapChange)
+            noti.schedule_notification_inner(NotificationKind::FailOrMapChange, None)
                 .is_err()
         );
     }
