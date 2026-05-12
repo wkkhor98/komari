@@ -170,10 +170,12 @@ fn update_delaying(resources: &mut Resources, solving_captcha: &mut SolvingCaptc
 }
 
 fn update_waiting_for_image(resources: &mut Resources, solving_captcha: &mut SolvingCaptcha) {
-    match resources.detector().detect_lie_detector_captcha_image() {
-        Ok(dialog_rect) => {
-            info!(target: "backend/player", "captcha dialog fully ready at {dialog_rect:?}, settling before OCR");
-            solving_captcha.dialog_rect = dialog_rect;
+    match resources
+        .detector()
+        .detect_lie_detector_captcha_image(solving_captcha.dialog_rect)
+    {
+        Ok(ready_rect) => {
+            info!(target: "backend/player", "captcha dialog fully ready at {ready_rect:?}, settling before OCR using original dialog anchor {:?}", solving_captcha.dialog_rect);
             solving_captcha.state = State::Settling(Timeout::default());
         }
         Err(e) => {
@@ -296,7 +298,10 @@ fn update_verifying(resources: &mut Resources, solving_captcha: &mut SolvingCapt
         panic!("solving captcha state is not verifying");
     };
 
-    if resources.detector().detect_lie_detector_captcha_success() {
+    if resources
+        .detector()
+        .detect_lie_detector_captcha_success(solving_captcha.dialog_rect)
+    {
         info!(target: "backend/player", "captcha solved successfully");
         FAIL_COUNT.store(0, Ordering::Relaxed);
         NOTIFIED.store(false, Ordering::Relaxed);
@@ -308,7 +313,10 @@ fn update_verifying(resources: &mut Resources, solving_captcha: &mut SolvingCapt
         return;
     }
 
-    if resources.detector().detect_lie_detector_captcha_failure() {
+    if resources
+        .detector()
+        .detect_lie_detector_captcha_failure(solving_captcha.dialog_rect)
+    {
         let fails = FAIL_COUNT.fetch_add(1, Ordering::Relaxed) + 1;
         resources.input.send_key(KeyKind::Enter);
         if fails >= 2 {

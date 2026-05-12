@@ -266,17 +266,17 @@ pub trait Detector: Debug + Send + Sync {
     fn detect_lie_detector_captcha(&self) -> Result<Rect>;
 
     /// Detects the captcha challenge image (the scrambled text area).
-    fn detect_lie_detector_captcha_image(&self) -> Result<Rect>;
+    fn detect_lie_detector_captcha_image(&self, dialog_rect: Rect) -> Result<Rect>;
 
     /// Reads the captcha character string from within `dialog_rect`.
     /// Returns `(text, png_bytes)` where `png_bytes` is the cropped image sent to the OCR API.
     fn detect_lie_detector_captcha_text(&self, dialog_rect: Rect) -> Result<(String, Vec<u8>)>;
 
     /// Returns true when the captcha success dialog is visible.
-    fn detect_lie_detector_captcha_success(&self) -> bool;
+    fn detect_lie_detector_captcha_success(&self, dialog_rect: Rect) -> bool;
 
     /// Returns true when the captcha failure dialog is visible.
-    fn detect_lie_detector_captcha_failure(&self) -> bool;
+    fn detect_lie_detector_captcha_failure(&self, dialog_rect: Rect) -> bool;
 
     /// Detects the state for HEXA Booster in the quick slots.
     fn detect_quick_slots_hexa_booster(&self) -> Result<QuickSlotsHexaBooster>;
@@ -547,20 +547,20 @@ impl Detector for DefaultDetector {
         detect_lie_detector_captcha(self.bgr(), &self.localization)
     }
 
-    fn detect_lie_detector_captcha_image(&self) -> Result<Rect> {
-        detect_lie_detector_captcha_image(self.bgr(), &self.localization)
+    fn detect_lie_detector_captcha_image(&self, dialog_rect: Rect) -> Result<Rect> {
+        detect_lie_detector_captcha_image(self.bgr(), dialog_rect)
     }
 
     fn detect_lie_detector_captcha_text(&self, dialog_rect: Rect) -> Result<(String, Vec<u8>)> {
         detect_lie_detector_captcha_text(self.bgr(), dialog_rect)
     }
 
-    fn detect_lie_detector_captcha_success(&self) -> bool {
-        detect_lie_detector_captcha_success(self.bgr()).is_ok()
+    fn detect_lie_detector_captcha_success(&self, dialog_rect: Rect) -> bool {
+        detect_lie_detector_captcha_success(self.bgr(), dialog_rect).is_ok()
     }
 
-    fn detect_lie_detector_captcha_failure(&self) -> bool {
-        detect_lie_detector_captcha_failure(self.bgr()).is_ok()
+    fn detect_lie_detector_captcha_failure(&self, dialog_rect: Rect) -> bool {
+        detect_lie_detector_captcha_failure(self.bgr(), dialog_rect).is_ok()
     }
 
     fn detect_quick_slots_hexa_booster(&self) -> Result<QuickSlotsHexaBooster> {
@@ -2439,23 +2439,8 @@ fn detect_lie_detector_captcha(
     )
 }
 
-fn detect_lie_detector_captcha_image(
-    bgr: &impl ToInputArray,
-    localization: &Localization,
-) -> Result<Rect> {
-    let template = localization
-        .lie_detector_captcha_image_base64
-        .as_ref()
-        .and_then(|base64| to_mat_from_base64(base64, false).ok());
-
-    detect_template(
-        bgr,
-        template
-            .as_ref()
-            .unwrap_or(&*LIE_DETECTOR_CAPTCHA_IMAGE_TEMPLATE),
-        Point::default(),
-        0.6,
-    )
+fn detect_lie_detector_captcha_image(bgr: &impl MatTraitConst, dialog_rect: Rect) -> Result<Rect> {
+    detect_captcha_status_text(bgr, dialog_rect, &["characters to pass the bot"], 0.85)
 }
 
 fn detect_lie_detector_captcha_text(
@@ -2489,28 +2474,98 @@ pub fn ocr_captcha_region(
     Ok((text, png_bytes))
 }
 
-fn detect_lie_detector_captcha_success(bgr: &impl ToInputArray) -> Result<Rect> {
-    static TEMPLATE: LazyLock<Mat> = LazyLock::new(|| {
-        imgcodecs::imdecode(
-            include_bytes!(env!("LIE_DETECTOR_CAPTCHA_SUCCESS_TEMPLATE")),
-            IMREAD_COLOR,
-        )
-        .unwrap()
-    });
-
-    detect_template(bgr, &*TEMPLATE, Point::default(), 0.6)
+fn detect_lie_detector_captcha_success(
+    bgr: &impl MatTraitConst,
+    dialog_rect: Rect,
+) -> Result<Rect> {
+    detect_captcha_status_text(bgr, dialog_rect, &["you have passed the bot check"], 0.9)
 }
 
-fn detect_lie_detector_captcha_failure(bgr: &impl ToInputArray) -> Result<Rect> {
-    static TEMPLATE: LazyLock<Mat> = LazyLock::new(|| {
-        imgcodecs::imdecode(
-            include_bytes!(env!("LIE_DETECTOR_CAPTCHA_FAILURE_TEMPLATE")),
-            IMREAD_COLOR,
-        )
-        .unwrap()
-    });
+fn detect_lie_detector_captcha_failure(
+    bgr: &impl MatTraitConst,
+    dialog_rect: Rect,
+) -> Result<Rect> {
+    detect_captcha_status_text(bgr, dialog_rect, &["you have failed the bot check"], 0.9)
+}
 
-    detect_template(bgr, &*TEMPLATE, Point::default(), 0.6)
+fn detect_captcha_status_text(
+    bgr: &impl MatTraitConst,
+    dialog_rect: Rect,
+    expected_texts: &[&str],
+    threshold: f64,
+) -> Result<Rect> {
+    let size = bgr.size()?;
+    // Status text sits in a fixed region relative to the initially detected
+    // captcha dialog. These offsets come from the calibrated ideal-ratio UI.
+    let search_region = Rect::from_points(
+        dialog_rect.tl() + Point::new(126, -105),
+        dialog_rect.tl() + Point::new(126 + 358, -105 + 143),
+    );
+    let search_region = Rect::new(
+        search_region.x.clamp(0, size.width),
+        search_region.y.clamp(0, size.height),
+        search_region.width.min(size.width - search_region.x.clamp(0, size.width)),
+        search_region.height.min(size.height - search_region.y.clamp(0, size.height)),
+    );
+    let roi = bgr.roi(search_region)?;
+    let (mat_in, w_ratio, h_ratio) = preprocess_for_text_bboxes(&roi);
+    let bboxes = extract_text_bboxes(&mat_in, w_ratio, h_ratio, 0, 0, 0.4);
+    if bboxes.is_empty() {
+        bail!("no text boxes found in captcha status search region");
+    }
+
+    let texts = extract_texts(&roi, &bboxes);
+    if texts.is_empty() {
+        bail!("no text recognized in captcha status search region");
+    }
+
+    let mut candidates = bboxes
+        .iter()
+        .copied()
+        .zip(texts)
+        .collect::<Vec<(Rect, String)>>();
+    candidates.sort_by_key(|(bbox, _)| (bbox.y / 10, bbox.x));
+
+    let line_bbox = candidates
+        .iter()
+        .map(|(bbox, _)| *bbox)
+        .reduce(|acc, bbox| acc | bbox)
+        .unwrap();
+    let line_text = candidates
+        .iter()
+        .map(|(_, text)| text.as_str())
+        .collect::<Vec<_>>()
+        .join(" ");
+    candidates.push((line_bbox, line_text));
+
+    let mut best: Option<(Rect, f64, String)> = None;
+    for (bbox, text) in candidates {
+        let normalized = normalize_detected_text(&text);
+        if normalized.is_empty() {
+            continue;
+        }
+
+        for expected in expected_texts {
+            let score = jaro_winkler(&normalized, &normalize_detected_text(expected));
+            let is_better = match best.as_ref() {
+                Some((_, best_score, _)) => score > *best_score,
+                None => true,
+            };
+            if score >= threshold && is_better {
+                best = Some((bbox + search_region.tl(), score, normalized.clone()));
+            }
+        }
+    }
+
+    best.map(|(bbox, _, _)| bbox)
+        .ok_or_else(|| anyhow!("captcha status text not found in OCR candidates"))
+}
+
+fn normalize_detected_text(text: &str) -> String {
+    text.chars()
+        .filter(|c| c.is_alphanumeric())
+        .flat_map(|c| c.to_lowercase())
+        .collect()
 }
 
 fn detect_quick_slots_hexa_booster<T: MatTraitConst + ToInputArray>(
