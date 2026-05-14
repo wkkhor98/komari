@@ -1,4 +1,4 @@
-use log::info;
+use log::{debug, info, warn};
 
 use super::{
     Player,
@@ -91,20 +91,52 @@ fn update_precondition(
     player_context: &PlayerContext,
     solving_rune: &mut SolvingRune,
 ) {
+    const PRECONDITION_TIMEOUT: u32 = 200;
+    const PRECONDITION_LOG_INTERVAL: u32 = 30;
+
     let State::Precondition(timeout) = solving_rune.state else {
         panic!("solving rune state is not precondition")
     };
 
-    match next_timeout_lifecycle(timeout, 15) {
-        Lifecycle::Ended => {
-            solving_rune.state =
-                if player_context.is_stationary && resources.input.is_all_keys_cleared() {
-                    State::Calibrating(Timeout::default())
-                } else {
-                    State::Precondition(timeout)
-                };
+    let is_stationary = player_context.is_stationary;
+    let keys_cleared = resources.input.is_all_keys_cleared();
+
+    match next_timeout_lifecycle(timeout, PRECONDITION_TIMEOUT) {
+        Lifecycle::Started(timeout) => {
+            debug!(
+                target: "backend/rune",
+                "rune precondition started: stationary={is_stationary} keys_cleared={keys_cleared}"
+            );
+            solving_rune.state = State::Precondition(timeout);
         }
-        Lifecycle::Started(timeout) | Lifecycle::Updated(timeout) => {
+        Lifecycle::Ended => {
+            if is_stationary && keys_cleared {
+                info!(target: "backend/rune", "rune precondition satisfied at timeout boundary, starting calibration");
+                solving_rune.state = State::Calibrating(Timeout::default());
+            } else {
+                warn!(
+                    target: "backend/rune",
+                    "rune precondition timed out after {PRECONDITION_TIMEOUT} ticks: stationary={is_stationary} keys_cleared={keys_cleared}"
+                );
+                solving_rune.state = State::Completed;
+            }
+        }
+        Lifecycle::Updated(timeout) => {
+            if is_stationary && keys_cleared {
+                info!(target: "backend/rune", "rune precondition satisfied, starting calibration");
+                solving_rune.state = State::Calibrating(Timeout::default());
+                return;
+            }
+
+            if timeout.current.is_multiple_of(PRECONDITION_LOG_INTERVAL) {
+                debug!(
+                    target: "backend/rune",
+                    "rune precondition waiting: tick={} stationary={} keys_cleared={}",
+                    timeout.current,
+                    is_stationary,
+                    keys_cleared
+                );
+            }
             solving_rune.state = State::Precondition(timeout);
         }
     }
