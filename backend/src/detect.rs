@@ -2504,8 +2504,12 @@ fn detect_captcha_status_text(
     let search_region = Rect::new(
         search_region.x.clamp(0, size.width),
         search_region.y.clamp(0, size.height),
-        search_region.width.min(size.width - search_region.x.clamp(0, size.width)),
-        search_region.height.min(size.height - search_region.y.clamp(0, size.height)),
+        search_region
+            .width
+            .min(size.width - search_region.x.clamp(0, size.width)),
+        search_region
+            .height
+            .min(size.height - search_region.y.clamp(0, size.height)),
     );
     let roi = bgr.roi(search_region)?;
     let (mat_in, w_ratio, h_ratio) = preprocess_for_text_bboxes(&roi);

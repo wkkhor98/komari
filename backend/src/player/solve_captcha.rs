@@ -35,6 +35,12 @@ const INITIAL_DELAY: u32 = 15;
 const SETTLE_DELAY: u32 = 90;
 /// ~5 seconds at 30 FPS to wait for success/failure confirmation.
 const VERIFY_TIMEOUT: u32 = 150;
+/// ~10 seconds at 30 FPS to wait for the captcha image to appear before giving up.
+const WAITING_FOR_IMAGE_TIMEOUT: u32 = 300;
+/// ~10 seconds at 30 FPS to wait for the OCR task to complete before giving up.
+const OCR_TIMEOUT: u32 = 300;
+/// Maximum consecutive OCR read failures before giving up entirely.
+const MAX_OCR_FAILURES: u8 = 3;
 
 /// Representing the current state of text captcha solving.
 #[derive(Clone, Copy, Debug, Default)]
@@ -43,12 +49,12 @@ pub enum State {
     Waiting,
     /// Waiting 3 seconds after first detection before pressing Escape.
     Delaying(Timeout),
-    /// Waiting for the captcha dialog to appear after Escape was pressed.
-    WaitingForImage,
+    /// Waiting for the captcha dialog to appear after Escape was pressed (times out after 10s).
+    WaitingForImage(Timeout),
     /// Waiting 0.5 seconds after image appeared before OCR.
     Settling(Timeout),
-    /// Gemini OCR HTTP call is in flight; task is held in [`SolvingCaptcha::ocr_task`].
-    Ocring,
+    /// Gemini OCR HTTP call is in flight; task is held in [`SolvingCaptcha::ocr_task`] (times out after 10s).
+    Ocring(Timeout),
     Typing(Timeout, usize),
     Verifying(Timeout),
     Completed,
@@ -60,6 +66,7 @@ pub struct SolvingCaptcha {
     dialog_rect: Rect,
     chars: Vec<(bool, KeyKind)>,
     ocr_task: Rc<RefCell<Option<Task<Result<(String, Vec<u8>)>>>>>,
+    ocr_fail_count: u8,
     #[cfg(debug_assertions)]
     recording: Option<Rc<RefCell<RecordingHandle>>>,
 }
@@ -69,9 +76,9 @@ impl Display for SolvingCaptcha {
         match self.state {
             State::Waiting => write!(f, "Waiting"),
             State::Delaying(_) => write!(f, "Delaying"),
-            State::WaitingForImage => write!(f, "WaitingForImage"),
+            State::WaitingForImage(_) => write!(f, "WaitingForImage"),
             State::Settling(_) => write!(f, "Settling"),
-            State::Ocring => write!(f, "Ocring"),
+            State::Ocring(_) => write!(f, "Ocring"),
             State::Typing(_, index) => write!(f, "Typing({index})"),
             State::Verifying(_) => write!(f, "Verifying"),
             State::Completed => write!(f, "Completed"),
@@ -93,9 +100,9 @@ pub fn update_solving_captcha_state(resources: &mut Resources, player: &mut Play
     match solving_captcha.state {
         State::Waiting => update_waiting(resources, &mut solving_captcha),
         State::Delaying(_) => update_delaying(resources, &mut solving_captcha),
-        State::WaitingForImage => update_waiting_for_image(resources, &mut solving_captcha),
+        State::WaitingForImage(_) => update_waiting_for_image(resources, &mut solving_captcha),
         State::Settling(_) => update_settling(resources, &mut solving_captcha),
-        State::Ocring => update_ocring(resources, &mut solving_captcha),
+        State::Ocring(_) => update_ocring(resources, &mut solving_captcha),
         State::Typing(_, _) => update_typing(resources, &mut solving_captcha),
         State::Verifying(_) => update_verifying(resources, &mut solving_captcha),
         State::Completed => unreachable!(),
@@ -164,12 +171,16 @@ fn update_delaying(resources: &mut Resources, solving_captcha: &mut SolvingCaptc
         Lifecycle::Ended => {
             debug!(target: "backend/player", "captcha initial delay done, pressing Escape to clear input");
             resources.input.send_key(KeyKind::Esc);
-            solving_captcha.state = State::WaitingForImage;
+            solving_captcha.state = State::WaitingForImage(Timeout::default());
         }
     }
 }
 
 fn update_waiting_for_image(resources: &mut Resources, solving_captcha: &mut SolvingCaptcha) {
+    let State::WaitingForImage(timeout) = solving_captcha.state else {
+        panic!("solving captcha state is not waiting for image");
+    };
+
     match resources
         .detector()
         .detect_lie_detector_captcha_image(solving_captcha.dialog_rect)
@@ -180,6 +191,15 @@ fn update_waiting_for_image(resources: &mut Resources, solving_captcha: &mut Sol
         }
         Err(e) => {
             debug!(target: "backend/player", "captcha dialog not yet ready: {e}");
+            match next_timeout_lifecycle(timeout, WAITING_FOR_IMAGE_TIMEOUT) {
+                Lifecycle::Started(timeout) | Lifecycle::Updated(timeout) => {
+                    solving_captcha.state = State::WaitingForImage(timeout);
+                }
+                Lifecycle::Ended => {
+                    warn!(target: "backend/player", "captcha image did not appear within timeout, giving up");
+                    solving_captcha.state = State::Completed;
+                }
+            }
         }
     }
 }
@@ -208,12 +228,16 @@ fn update_settling(resources: &mut Resources, solving_captcha: &mut SolvingCaptc
                     .unwrap_or_else(|_| Err(anyhow::anyhow!("OCR thread dropped sender")))
             });
             *solving_captcha.ocr_task.borrow_mut() = Some(task);
-            solving_captcha.state = State::Ocring;
+            solving_captcha.state = State::Ocring(Timeout::default());
         }
     }
 }
 
 fn update_ocring(resources: &mut Resources, solving_captcha: &mut SolvingCaptcha) {
+    let State::Ocring(timeout) = solving_captcha.state else {
+        panic!("solving captcha state is not ocring");
+    };
+
     let update = {
         let mut guard = solving_captcha.ocr_task.borrow_mut();
         match guard.as_mut().and_then(|t| t.poll_inner()) {
@@ -238,25 +262,51 @@ fn update_ocring(resources: &mut Resources, solving_captcha: &mut SolvingCaptcha
             );
             let chars = parse_captcha_chars(&text);
             if chars.is_empty() {
-                warn!(target: "backend/player", "captcha text '{text}' parsed to no typeable keys, going back to wait for image");
+                warn!(target: "backend/player", "captcha text '{text}' parsed to no typeable keys");
                 resources
                     .notification
                     .schedule_notification(NotificationKind::LieDetectorCaptchaOcrFailed);
-                solving_captcha.state = State::WaitingForImage;
+                solving_captcha.ocr_fail_count += 1;
+                if solving_captcha.ocr_fail_count >= MAX_OCR_FAILURES {
+                    warn!(target: "backend/player", "captcha OCR failed {} times in a row, giving up", solving_captcha.ocr_fail_count);
+                    solving_captcha.ocr_fail_count = 0;
+                    solving_captcha.state = State::Completed;
+                } else {
+                    warn!(target: "backend/player", "captcha OCR failure {} of {MAX_OCR_FAILURES}, going back to wait for image", solving_captcha.ocr_fail_count);
+                    solving_captcha.state = State::WaitingForImage(Timeout::default());
+                }
             } else {
+                solving_captcha.ocr_fail_count = 0;
                 info!(target: "backend/player", "captcha typing {} chars", chars.len());
                 solving_captcha.chars = chars;
                 solving_captcha.state = State::Typing(Timeout::default(), 0);
             }
         }
         Update::Err(e) => {
-            warn!(target: "backend/player", "captcha OCR failed: {e}, going back to wait for image");
+            warn!(target: "backend/player", "captcha OCR failed: {e}");
             resources
                 .notification
                 .schedule_notification(NotificationKind::LieDetectorCaptchaOcrFailed);
-            solving_captcha.state = State::WaitingForImage;
+            solving_captcha.ocr_fail_count += 1;
+            if solving_captcha.ocr_fail_count >= MAX_OCR_FAILURES {
+                warn!(target: "backend/player", "captcha OCR failed {} times in a row, giving up", solving_captcha.ocr_fail_count);
+                solving_captcha.ocr_fail_count = 0;
+                solving_captcha.state = State::Completed;
+            } else {
+                warn!(target: "backend/player", "captcha OCR failure {} of {MAX_OCR_FAILURES}, going back to wait for image", solving_captcha.ocr_fail_count);
+                solving_captcha.state = State::WaitingForImage(Timeout::default());
+            }
         }
-        Update::Pending => {}
+        Update::Pending => match next_timeout_lifecycle(timeout, OCR_TIMEOUT) {
+            Lifecycle::Started(timeout) | Lifecycle::Updated(timeout) => {
+                solving_captcha.state = State::Ocring(timeout);
+            }
+            Lifecycle::Ended => {
+                warn!(target: "backend/player", "captcha OCR timed out, giving up");
+                *solving_captcha.ocr_task.borrow_mut() = None;
+                solving_captcha.state = State::Completed;
+            }
+        },
     }
 }
 
@@ -330,7 +380,7 @@ fn update_verifying(resources: &mut Resources, solving_captcha: &mut SolvingCapt
             solving_captcha.state = State::Completed;
         } else {
             info!(target: "backend/player", "captcha failed (attempt {fails}), waiting for new captcha image");
-            solving_captcha.state = State::WaitingForImage;
+            solving_captcha.state = State::WaitingForImage(Timeout::default());
         }
         return;
     }
