@@ -4,6 +4,7 @@ version.workspace = true
 edition.workspace = true
 
 [dependencies]
+mimalloc = "0.1"
 futures-util = "0.3"
 rand = { workspace = true }
 tokio = { workspace = true }

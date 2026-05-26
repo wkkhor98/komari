@@ -4,6 +4,9 @@
 #![feature(push_mut)]
 #![feature(iter_intersperse)]
 
+#[global_allocator]
+static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
+
 use std::{env::current_exe, io::stdout, string::ToString, sync::LazyLock};
 
 use actions::ActionsScreen;
