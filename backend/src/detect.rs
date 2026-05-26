@@ -1,4 +1,5 @@
 use std::{
+    cell::RefCell,
     collections::HashMap,
     env,
     fmt::Debug,
@@ -2995,37 +2996,44 @@ fn detect_template_multiple<T: ToInputArray + MatTraitConst>(
         matches.push(Ok((rect, score)));
     }
 
-    let mut result = Mat::default();
-    if let Err(err) = match_template(mat, template, &mut result, TM_CCOEFF_NORMED, &mask) {
-        error!(target: "backend/detect", "template detection error {err}");
-        return vec![];
+    thread_local! {
+        static RESULT_BUF: RefCell<Mat> = RefCell::new(Mat::default());
     }
 
-    let template_size = template.size().unwrap();
-    let max_matches = max_matches.max(1);
-    let mut matches = Vec::new();
-    while matches.len() < max_matches {
-        let mut score = 0f64;
-        let mut loc = Point::default();
-        min_max_loc(
-            &result,
-            None,
-            Some(&mut score),
-            None,
-            Some(&mut loc),
-            &no_array(),
-        )
-        .unwrap();
-        if score < threshold {
-            matches.push(Err(anyhow!("template not found").context(score)));
-            break;
+    RESULT_BUF.with(|buf| {
+        let mut result = buf.borrow_mut();
+
+        if let Err(err) = match_template(mat, template, &mut *result, TM_CCOEFF_NORMED, &mask) {
+            error!(target: "backend/detect", "template detection error {err}");
+            return vec![];
         }
 
-        clear_result(&mut result, loc, template_size);
-        append_result(&mut matches, score, loc, offset, template_size);
-    }
+        let template_size = template.size().unwrap();
+        let max_matches = max_matches.max(1);
+        let mut matches = Vec::new();
+        while matches.len() < max_matches {
+            let mut score = 0f64;
+            let mut loc = Point::default();
+            min_max_loc(
+                &*result,
+                None,
+                Some(&mut score),
+                None,
+                Some(&mut loc),
+                &no_array(),
+            )
+            .unwrap();
+            if score < threshold {
+                matches.push(Err(anyhow!("template not found").context(score)));
+                break;
+            }
 
-    matches
+            clear_result(&mut result, loc, template_size);
+            append_result(&mut matches, score, loc, offset, template_size);
+        }
+
+        matches
+    })
 }
 
 /// Extracts texts from the non-preprocessed BGR `Mat` and detected text bounding boxes.

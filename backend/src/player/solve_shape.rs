@@ -44,6 +44,7 @@ pub enum State {
 pub struct SolvingShape {
     state: State,
     solving: Option<Rc<RefCell<Solving>>>,
+    #[allow(clippy::type_complexity)]
     lie_detector_task: Rc<RefCell<Option<Task<Result<bool>>>>>,
 }
 

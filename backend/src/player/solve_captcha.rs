@@ -65,6 +65,7 @@ pub struct SolvingCaptcha {
     state: State,
     dialog_rect: Rect,
     chars: Vec<(bool, KeyKind)>,
+    #[allow(clippy::type_complexity)]
     ocr_task: Rc<RefCell<Option<Task<Result<(String, Vec<u8>)>>>>>,
     ocr_fail_count: u8,
     #[cfg(debug_assertions)]
