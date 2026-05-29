@@ -25,6 +25,7 @@ use crate::{
 };
 
 static FAIL_COUNT: AtomicU8 = AtomicU8::new(0);
+static OCR_FAIL_COUNT: AtomicU8 = AtomicU8::new(0);
 static NOTIFIED: AtomicBool = AtomicBool::new(false);
 
 const CHECK_INTERVAL: u64 = 30;
@@ -67,7 +68,6 @@ pub struct SolvingCaptcha {
     chars: Vec<(bool, KeyKind)>,
     #[allow(clippy::type_complexity)]
     ocr_task: Rc<RefCell<Option<Task<Result<(String, Vec<u8>)>>>>>,
-    ocr_fail_count: u8,
     #[cfg(debug_assertions)]
     recording: Option<Rc<RefCell<RecordingHandle>>>,
 }
@@ -267,17 +267,9 @@ fn update_ocring(resources: &mut Resources, solving_captcha: &mut SolvingCaptcha
                 resources
                     .notification
                     .schedule_notification(NotificationKind::LieDetectorCaptchaOcrFailed);
-                solving_captcha.ocr_fail_count += 1;
-                if solving_captcha.ocr_fail_count >= MAX_OCR_FAILURES {
-                    warn!(target: "backend/player", "captcha OCR failed {} times in a row, giving up", solving_captcha.ocr_fail_count);
-                    solving_captcha.ocr_fail_count = 0;
-                    solving_captcha.state = State::Completed;
-                } else {
-                    warn!(target: "backend/player", "captcha OCR failure {} of {MAX_OCR_FAILURES}, going back to wait for image", solving_captcha.ocr_fail_count);
-                    solving_captcha.state = State::WaitingForImage(Timeout::default());
-                }
+                ocr_fail_or_halt(resources, solving_captcha);
             } else {
-                solving_captcha.ocr_fail_count = 0;
+                OCR_FAIL_COUNT.store(0, Ordering::Relaxed);
                 info!(target: "backend/player", "captcha typing {} chars", chars.len());
                 solving_captcha.chars = chars;
                 solving_captcha.state = State::Typing(Timeout::default(), 0);
@@ -288,26 +280,38 @@ fn update_ocring(resources: &mut Resources, solving_captcha: &mut SolvingCaptcha
             resources
                 .notification
                 .schedule_notification(NotificationKind::LieDetectorCaptchaOcrFailed);
-            solving_captcha.ocr_fail_count += 1;
-            if solving_captcha.ocr_fail_count >= MAX_OCR_FAILURES {
-                warn!(target: "backend/player", "captcha OCR failed {} times in a row, giving up", solving_captcha.ocr_fail_count);
-                solving_captcha.ocr_fail_count = 0;
-                solving_captcha.state = State::Completed;
-            } else {
-                warn!(target: "backend/player", "captcha OCR failure {} of {MAX_OCR_FAILURES}, going back to wait for image", solving_captcha.ocr_fail_count);
-                solving_captcha.state = State::WaitingForImage(Timeout::default());
-            }
+            ocr_fail_or_halt(resources, solving_captcha);
         }
         Update::Pending => match next_timeout_lifecycle(timeout, OCR_TIMEOUT) {
             Lifecycle::Started(timeout) | Lifecycle::Updated(timeout) => {
                 solving_captcha.state = State::Ocring(timeout);
             }
             Lifecycle::Ended => {
-                warn!(target: "backend/player", "captcha OCR timed out, giving up");
+                warn!(target: "backend/player", "captcha OCR timed out");
                 *solving_captcha.ocr_task.borrow_mut() = None;
-                solving_captcha.state = State::Completed;
+                resources
+                    .notification
+                    .schedule_notification(NotificationKind::LieDetectorCaptchaOcrFailed);
+                ocr_fail_or_halt(resources, solving_captcha);
             }
         },
+    }
+}
+
+fn ocr_fail_or_halt(resources: &mut Resources, solving_captcha: &mut SolvingCaptcha) {
+    let fails = OCR_FAIL_COUNT.fetch_add(1, Ordering::Relaxed) + 1;
+    if fails >= MAX_OCR_FAILURES {
+        warn!(target: "backend/player", "captcha OCR failed {fails} times in a row, stopping bot");
+        OCR_FAIL_COUNT.store(0, Ordering::Relaxed);
+        NOTIFIED.store(false, Ordering::Relaxed);
+        resources
+            .notification
+            .schedule_notification(NotificationKind::LieDetectorCaptchaFailed);
+        resources.operation.state = OperationState::Halting;
+        solving_captcha.state = State::Completed;
+    } else {
+        warn!(target: "backend/player", "captcha OCR failure {fails} of {MAX_OCR_FAILURES}, going back to wait for image");
+        solving_captcha.state = State::WaitingForImage(Timeout::default());
     }
 }
 
@@ -355,6 +359,7 @@ fn update_verifying(resources: &mut Resources, solving_captcha: &mut SolvingCapt
     {
         info!(target: "backend/player", "captcha solved successfully");
         FAIL_COUNT.store(0, Ordering::Relaxed);
+        OCR_FAIL_COUNT.store(0, Ordering::Relaxed);
         NOTIFIED.store(false, Ordering::Relaxed);
         resources.input.send_key(KeyKind::Enter);
         resources

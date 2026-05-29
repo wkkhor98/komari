@@ -1,5 +1,5 @@
 use std::{
-    cell::RefCell,
+    cell::{RefCell, UnsafeCell},
     collections::HashMap,
     env,
     fmt::Debug,
@@ -317,33 +317,18 @@ pub trait Detector: Debug + Send + Sync {
     fn detect_violetta_numbers(&self, region: Rect) -> Vec<Rect>;
 }
 
-type MatFn = Box<dyn FnOnce() -> Mat + Send>;
-
 /// A detector that lazily transform `Mat`.
 #[derive(Debug)]
 pub struct DefaultDetector {
     bgra: Arc<OwnedMat>,
-    bgr: LazyLock<Mat, MatFn>,
-    grayscale: LazyLock<Mat, MatFn>,
     localization: Arc<Localization>,
 }
 
 impl DefaultDetector {
     /// Creates a default implementation of [`Detector`] from the given BGRA `mat`.
     pub fn new(mat: OwnedMat, localization: Arc<Localization>) -> Self {
-        let bgra = Arc::new(mat);
-
-        let cloned = bgra.clone();
-        let bgr = LazyLock::<Mat, MatFn>::new(Box::new(move || to_bgr(&cloned.as_mat())));
-
-        let cloned = bgra.clone();
-        let grayscale =
-            LazyLock::<Mat, MatFn>::new(Box::new(move || to_grayscale(&cloned.as_mat(), true)));
-
         Self {
-            bgra,
-            bgr,
-            grayscale,
+            bgra: Arc::new(mat),
             localization,
         }
     }
@@ -352,8 +337,44 @@ impl DefaultDetector {
         self.bgra.as_mat()
     }
 
+    /// Returns a reference to a thread-local BGR `Mat` that is rewritten each call.
+    ///
+    /// OpenCV reuses the existing buffer when the size matches, avoiding per-tick
+    /// heap allocation of the ~6 MB conversion result.
     fn bgr(&self) -> &Mat {
-        &self.bgr
+        thread_local! {
+            static BGR_BUF: UnsafeCell<Mat> = UnsafeCell::new(Mat::default());
+        }
+        let ptr = BGR_BUF.with(|cell| {
+            // SAFETY: single-threaded sequential access; no two &mut exist simultaneously.
+            let mat = unsafe { &mut *cell.get() };
+            cvt_color_def(&self.bgra.as_mat(), mat, COLOR_BGRA2BGR).unwrap();
+            cell.get()
+        });
+        // SAFETY: the thread-local Mat lives for the thread's lifetime, which exceeds &self.
+        unsafe { &*ptr }
+    }
+
+    /// Returns a reference to a thread-local grayscale `Mat` that is rewritten each call.
+    ///
+    /// Same reuse strategy as [`Self::bgr`]. Contrast enhancement is applied to match the
+    /// original `to_grayscale(..., add_contrast: true)` behavior.
+    fn grayscale_mat(&self) -> &Mat {
+        thread_local! {
+            static GRAY_BUF: UnsafeCell<Mat> = UnsafeCell::new(Mat::default());
+        }
+        let ptr = GRAY_BUF.with(|cell| {
+            // SAFETY: same as bgr().
+            let mat = unsafe { &mut *cell.get() };
+            cvt_color_def(&self.bgra.as_mat(), mat, COLOR_BGRA2GRAY).unwrap();
+            unsafe {
+                mat.modify_inplace(|mat, mat_mut| {
+                    add_weighted_def(mat, 1.5, mat, 0.0, -80.0, mat_mut).unwrap();
+                });
+            }
+            cell.get()
+        });
+        unsafe { &*ptr }
     }
 }
 
@@ -363,7 +384,7 @@ impl Detector for DefaultDetector {
     }
 
     fn grayscale(&self) -> &Mat {
-        &self.grayscale
+        self.grayscale_mat()
     }
 
     fn detect_mobs(
@@ -3475,18 +3496,6 @@ fn to_hsv(mat: &impl MatTraitConst) -> Mat {
 }
 
 /// Converts a BGRA `Mat` image to BGR.
-#[inline]
-fn to_bgr(mat: &impl MatTraitConst) -> Mat {
-    let mut mat = mat.try_clone().unwrap();
-    unsafe {
-        // SAFETY: can be modified inplace
-        mat.modify_inplace(|mat, mat_mut| {
-            cvt_color_def(mat, mat_mut, COLOR_BGRA2BGR).unwrap();
-        });
-    }
-    mat
-}
-
 /// Converts a BGRA `Mat` image to grayscale.
 ///
 /// `add_contrast` can be set to `true` in order to increase contrast by a fixed amount
